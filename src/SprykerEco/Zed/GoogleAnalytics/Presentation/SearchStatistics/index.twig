@@ -1,0 +1,116 @@
+{% extends '@Gui/Layout/layout.twig' %}
+
+{% block section_title %}
+    {{ 'Search Statistics' | trans }}
+{% endblock %}
+
+{% block content %}
+    {{ form_start(form, {'method': 'GET', 'attr': {'class': 'form-filter'}}) }}
+    <div class="row">
+        <div class="col-md-3">
+            <div class="form-group mr-2">
+                {{ form_label(form.store) }}
+                {{ form_widget(form.store, {'attr': {'class': 'form-control js-form-submitter'}}) }}
+            </div>
+            <div class="form-group mr-2">
+                {{ form_label(form.locale) }}
+                {{ form_widget(form.locale, {'attr': {'class': 'form-control js-form-submitter'}}) }}
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="form-group mr-2">
+                {{ form_label(form.dateRangePreset) }}
+                {{ form_widget(form.dateRangePreset, {'attr': {'class': 'form-control'}}) }}
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="form-group mr-2">
+                {{ form_label(form.startDate, 'From') }}
+                {{ form_widget(form.startDate, {'attr': {'class': 'form-control'}}) }}
+            </div>
+            <div class="form-group mr-2">
+                {{ form_label(form.endDate, 'To') }}
+                {{ form_widget(form.endDate, {'attr': {'class': 'form-control'}}) }}
+            </div>
+        </div>
+        <div class="col-md-12">
+            <button type="submit" class="btn btn-primary">{{ 'Apply' | trans }}</button>
+        </div>
+        <div class="col-md-12">
+            <p class="text-muted mt-2">{{ 'Data may be delayed up to 48 hours due to GA4 processing.' | trans }}</p>
+        </div>
+    </div>
+    {{ form_end(form) }}
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="ibox">
+                <div class="ibox-title">
+                    <h5>
+                        {{ 'Top Search Terms' | trans }}
+                    </h5>
+                    <div class="ibox-tools">
+                        <a href="{{ searchTermsViewAllUrl }}">{{ 'View all' | trans }}</a>
+                    </div>
+                </div>
+                <div class="ibox-content">
+                    <table class="table table-striped table-bordered">
+                        <thead>
+                            <tr>
+                                <th>{{ 'Search Term' | trans }}</th>
+                                <th>{{ 'Count' | trans }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for event in searchCollection.events %}
+                                <tr>
+                                    <td>{{ event.searchTerm | e }}</td>
+                                    <td>{{ event.count }}</td>
+                                </tr>
+                            {% else %}
+                                <tr>
+                                    <td colspan="3">{{ 'No data available.' | trans }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="ibox">
+                <div class="ibox-title">
+                    <h5>
+                        {{ 'Top Zero-Result Searches' | trans }}
+                    </h5>
+                    <div class="ibox-tools">
+                        <a href="{{ zeroResultsViewAllUrl }}">{{ 'View all' | trans }}</a>
+                    </div>
+                </div>
+                <div class="ibox-content">
+                    <table class="table table-striped table-bordered">
+                        <thead>
+                            <tr>
+                                <th>{{ 'Search Term' | trans }}</th>
+                                <th>{{ 'Count' | trans }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for event in zeroResultsCollection.events %}
+                                <tr>
+                                    <td>{{ event.searchTerm | e }}</td>
+                                    <td>{{ event.count }}</td>
+                                </tr>
+                            {% else %}
+                                <tr>
+                                    <td colspan="3">{{ 'No data available.' | trans }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<config>
+    <google-analytics>
+        <label>Search Statistics</label>
+        <title>Search Statistics</title>
+        <bundle>google-analytics</bundle>
+        <controller>search-statistics</controller>
+        <action>index</action>
+        <pages>
+            <google-analytics-search-terms>
+                <label>Search Terms</label>
+                <title>Search Terms</title>
+                <bundle>google-analytics</bundle>
+                <controller>search-terms</controller>
+                <action>index</action>
+            </google-analytics-search-terms>
+            <google-analytics-zero-results>
+                <label>Zero Results</label>
+                <title>Zero Results</title>
+                <bundle>google-analytics</bundle>
+                <controller>zero-results</controller>
+                <action>index</action>
+            </google-analytics-zero-results>
+        </pages>
+    </google-analytics>
+</config>

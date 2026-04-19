@@ -1,0 +1,90 @@
+# yaml-language-server: $schema=../../../../Spryker/Configuration/resources/configuration/configuration-schema-v1.json
+features:
+    - key: google_analytics
+      name: Google Analytics
+      description: Google Analytics 4 integration settings.
+      enabled: true
+      order: 0
+      tabs:
+          - key: storefront2
+            name: Storefront
+            description: Settings for the storefront tracking snippet.
+            enabled: true
+            order: 0
+            groups:
+                - key: tracking
+                  name: Tracking
+                  description: Storefront tracking configuration for GA4 using gtag.js.
+                  enabled: true
+                  order: 0
+                  scopes:
+                      - global
+                      - store
+                  settings:
+                      - key: enabled
+                        name: Enabled
+                        description: Enable or disable GA4 tracking for the storefront.
+                        type: boolean
+                        default_value: false
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 0
+                        scopes:
+                            - global
+                            - store
+                      - key: measurement_id
+                        name: Measurement ID
+                        description: >
+                            GA4 Measurement ID (format: G-XXXXXXXXXX) used by the Google tag on the storefront.
+                            Documentation: https://support.google.com/analytics/answer/9539598
+                        type: string
+                        default_value: ''
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 1
+                        scopes:
+                            - global
+                            - store
+
+          - key: data_api
+            name: Data API
+            description: Credentials and identifiers for querying GA4 reports via the Google Analytics Data API.
+            enabled: true
+            order: 1
+            groups:
+                - key: connection
+                  name: Connection
+                  description: Connection settings for the Google Analytics Data API (GA4).
+                  enabled: true
+                  order: 0
+                  scopes:
+                      - global
+                  settings:
+                      - key: property_id
+                        name: Property ID
+                        description: >
+                            GA4 numeric property ID (e.g. 123456789).
+                            Documentation: https://developers.google.com/analytics/devguides/reporting/data/v1/property-id
+                        type: string
+                        default_value: ''
+                        enabled: true
+                        secret: false
+                        storefront: false
+                        order: 0
+                        scopes:
+                            - global
+                      - key: service_account_credentials_json
+                        name: Service Account Credentials JSON
+                        description: >
+                            Full JSON content of the Google Cloud service account key. Stored encrypted.
+                            Documentation: https://docs.cloud.google.com/iam/docs/keys-create-delete
+                        type: text
+                        default_value: ''
+                        enabled: true
+                        secret: true
+                        storefront: false
+                        order: 1
+                        scopes:
+                            - global

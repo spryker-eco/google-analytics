@@ -1,0 +1,47 @@
+{% extends '@Gui/Layout/layout.twig' %}
+
+{% set widget_title = 'Search Terms' | trans %}
+
+{% block head_title widget_title %}
+{% block section_title widget_title %}
+
+{% block action %}
+    {{ backActionButton(url('/google-analytics/search-statistics'), 'Back to Statistics Dashboard' | trans) }}
+{% endblock %}
+
+{% block content %}
+    {% embed '@Gui/Partials/widget.twig' %}
+        {% block widget_title -%}
+            <h5>{{ 'All Search Terms' | trans }}</h5>
+        {%- endblock %}
+
+        {% block widget_content %}
+            {{ form_start(form, { 'attr': { 'class': 'form-filter' } }) }}
+                <div class="row">
+                    <div class="col-sm-2">
+                        {{ form_row(form.store, { label: 'Store' }) }}
+                    </div>
+                    <div class="col-sm-2">
+                        {{ form_row(form.locale, { label: 'Locale' }) }}
+                    </div>
+                    <div class="col-sm-3">
+                        {{ form_row(form.dateRangePreset, {
+                            attr: { class: 'js-form-submitter' }
+                        }) }}
+                    </div>
+                    <div class="col-sm-2">
+                        {{ form_row(form.startDate, { label: 'From' }) }}
+                    </div>
+                    <div class="col-sm-2">
+                        {{ form_row(form.endDate, { label: 'To' }) }}
+                    </div>
+                    <div class="col-sm-1 align-self-end">
+                        <button type="submit" class="btn btn-primary btn-sm mb-3">{{ 'Apply' | trans }}</button>
+                    </div>
+                </div>
+            {{ form_end(form) }}
+
+            {{ table | raw }}
+        {% endblock %}
+    {% endembed %}
+{% endblock %}

@@ -1,0 +1,23 @@
+namespace: SprykerEcoTest\Zed\GoogleAnalytics
+
+paths:
+    tests: .
+    data: ../../../_data
+    support: _support
+    output: ../../../_output
+
+coverage:
+    enabled: true
+    remote: false
+    whitelist:
+        {
+            include: ['../../../../src/SprykerEco/Zed/GoogleAnalytics/**/*.php'],
+        }
+
+suites:
+    Business:
+        path: Business
+        actor: GoogleAnalyticsBusinessTester
+        modules:
+            enabled:
+                - Asserts
