@@ -1,0 +1,22 @@
+{% extends model('component') %}
+
+{% define config = {
+    name: 'sprk-google-analytics',
+    tag: 'sprk-google-analytics',
+} %}
+
+{% define data = {
+    gtagId: '123',
+} %}
+
+{% define attributes = {
+    'data-gtag-script-src': "https://www.googletagmanager.com/gtag/js?id=#{data.gtagId}",
+} %}
+
+{% block body %}
+    {% include molecule('script-loader') with {
+        data: {
+            'src': attributes['data-gtag-script-src'],
+        },
+    } only %}
+{% endblock %}
