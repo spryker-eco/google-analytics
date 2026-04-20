@@ -4,5 +4,5 @@ export default register('sprk-google-analytics', () =>
     import(
         /* webpackMode: "lazy" */
         /* webpackChunkName: "sprk-google-analytics" */
-        './sprk-google-analytics
+        './sprk-google-analytics'
     ),)
