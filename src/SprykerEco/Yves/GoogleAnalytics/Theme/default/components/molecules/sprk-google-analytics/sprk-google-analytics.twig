@@ -27,10 +27,11 @@
             'src': attributes['data-gtag-script-src'],
         },
     } only %}
+
     <script>
         window.dataLayer = window.dataLayer || [];
         function gtag(){dataLayer.push(arguments);}
         gtag('js', new Date());
-        gtag('config', data.gtagId);
+        gtag('config', '{{ data.gtagId }}');
     </script>
 {% endblock %}
