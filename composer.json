@@ -8,9 +8,13 @@
         "php": ">=8.3",
         "spryker/gui": "^5.0.0",
         "spryker/kernel": "*",
-        "spryker/twig": "*"
+        "spryker/locale": "*",
+        "spryker/store": "*",
+        "spryker/symfony": "*",
+        "spryker/util-text": "*"
     },
     "require-dev": {
+        "phpstan/phpstan": "*",
         "spryker/code-sniffer": "*",
         "spryker/testify": "*"
     },
