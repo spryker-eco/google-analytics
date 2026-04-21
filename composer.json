@@ -1,12 +1,12 @@
 {
     "name": "spryker-eco/google-analytics",
     "type": "library",
-    "description": "GoogleAnalytics module - GA4 storefront tracking and zero search results Back Office dashboard",
+    "description": "GoogleAnalytics module",
     "license": "proprietary",
     "require": {
         "google/analytics-data": "^0.22",
         "php": ">=8.3",
-        "spryker/gui": "*",
+        "spryker/gui": "^5.0.0",
         "spryker/kernel": "*",
         "spryker/twig": "*"
     },
