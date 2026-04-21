@@ -1,9 +1,11 @@
 <?php
 
 /**
- * This file is part of the Spryker Suite.
- * For full license information, please view the LICENSE file that was distributed with this source code.
+ * Copyright © 2016-present Spryker Systems GmbH. All rights reserved.
+ * Use of this software requires acceptance of the Evaluation License Agreement. See LICENSE file.
  */
+
+declare(strict_types = 1);
 
 namespace SprykerEco\Zed\GoogleAnalytics\Communication\Controller;
 
@@ -42,6 +44,8 @@ class SearchStatisticsController extends AbstractController
     protected const int OVERVIEW_PAGINATION_OFFSET = 0;
 
     /**
+     * @param \Symfony\Component\HttpFoundation\Request $request
+     *
      * @return array<string, mixed>
      */
     public function indexAction(Request $request): array
@@ -65,6 +69,8 @@ class SearchStatisticsController extends AbstractController
     }
 
     /**
+     * @param string $path
+     * @param string $formName
      * @param array<string, mixed> $formData
      */
     protected function buildViewAllUrl(string $path, string $formName, array $formData): string
@@ -120,6 +126,7 @@ class SearchStatisticsController extends AbstractController
     }
 
     /**
+     * @param string $eventName
      * @param array<string, mixed> $formData
      */
     protected function buildCriteria(

@@ -1,15 +1,16 @@
 <?php
 
 /**
- * This file is part of the Spryker Suite.
- * For full license information, please view the LICENSE file that was distributed with this source code.
+ * Copyright © 2016-present Spryker Systems GmbH. All rights reserved.
+ * Use of this software requires acceptance of the Evaluation License Agreement. See LICENSE file.
  */
 
-declare(strict_types=1);
+declare(strict_types = 1);
 
 namespace SprykerEco\Zed\GoogleAnalytics\Communication\Table;
 
 use ArrayObject;
+use Generated\Shared\Transfer\GoogleAnalyticsEventConditionsTransfer;
 use Generated\Shared\Transfer\GoogleAnalyticsEventCriteriaTransfer;
 use Generated\Shared\Transfer\GoogleAnalyticsEventTransfer;
 use Generated\Shared\Transfer\PaginationTransfer;
@@ -65,6 +66,8 @@ class SearchTermsTable extends AbstractTable
     }
 
     /**
+     * @param \Spryker\Zed\Gui\Communication\Table\TableConfiguration $config
+     *
      * @return array<int, array<string, mixed>>
      */
     protected function prepareData(TableConfiguration $config): array
@@ -78,7 +81,11 @@ class SearchTermsTable extends AbstractTable
         $searchTermData = $this->getSearchTerm();
         $searchValue = $searchTermData[static::PARAMETER_VALUE] ?? '';
 
-        $this->googleAnalyticsEventCriteriaTransfer->getConditions()
+        if (!$this->googleAnalyticsEventCriteriaTransfer->getConditions()) {
+            $this->googleAnalyticsEventCriteriaTransfer->setConditions(new GoogleAnalyticsEventConditionsTransfer());
+        }
+
+        $this->googleAnalyticsEventCriteriaTransfer->getConditionsOrFail()
             ->setEventName($this->googleAnalyticsConfig->getEventNameSearch())
             ->setWithLastOccurred(true)
             ->setSearchTerm($searchValue ?: null);
@@ -97,7 +104,7 @@ class SearchTermsTable extends AbstractTable
 
         $googleAnalyticsEventCollectionTransfer = $this->googleAnalyticsFacade->getEventCollection($this->googleAnalyticsEventCriteriaTransfer);
 
-        $totalCount = $googleAnalyticsEventCollectionTransfer->getPagination()->getNbResults();
+        $totalCount = $googleAnalyticsEventCollectionTransfer->getPaginationOrFail()->getNbResults() ?? 0;
         $this->setTotal($totalCount);
         $this->setFiltered($totalCount);
 
