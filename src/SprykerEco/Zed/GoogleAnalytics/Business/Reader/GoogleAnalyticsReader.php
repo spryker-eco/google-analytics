@@ -336,7 +336,7 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
                 'locale' => $localeDimension && isset($indexMap[$localeDimension])
                     ? $this->normalizeDimensionValue($dimensionValues[$indexMap[$localeDimension]]->getValue())
                     : null,
-                'count' => (int)$row->getMetricValues()[0]->getValue(),
+                'count' => (int)($row->getMetricValues()[0] ?? null)?->getValue(),
             ];
         }
 
@@ -428,10 +428,10 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
     }
 
     protected function buildEmptyCollection(
-        GoogleAnalyticsEventCriteriaTransfer $criteriaTransfer,
+        GoogleAnalyticsEventCriteriaTransfer $googleAnalyticsEventCriteriaTransfer,
         int $totalCount,
     ): GoogleAnalyticsEventCollectionTransfer {
-        $paginationTransfer = $criteriaTransfer->getPaginationOrFail();
+        $paginationTransfer = $googleAnalyticsEventCriteriaTransfer->getPaginationOrFail();
         $paginationTransfer->setNbResults($totalCount);
 
         return (new GoogleAnalyticsEventCollectionTransfer())

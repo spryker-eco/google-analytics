@@ -27,9 +27,9 @@ abstract class AbstractGoogleAnalyticsFilterForm extends AbstractType
 
     public const string FIELD_LOCALE = 'locale';
 
-    public const string OPTION_STORE_CHOICES = 'store_choices';
+    protected const string OPTION_STORE_CHOICES = 'store_choices';
 
-    public const string OPTION_LOCALE_CHOICES = 'locale_choices';
+    protected const string OPTION_LOCALE_CHOICES = 'locale_choices';
 
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {

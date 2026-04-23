@@ -43,9 +43,6 @@ class OverviewFilterFormDataProvider
         ];
     }
 
-    // Stores and locales are bounded data sets (typically < 50 items per installation).
-    // If the dataset grows significantly, replace with an async autocomplete (Option B).
-
     /**
      * @return array<string, string>
      */
