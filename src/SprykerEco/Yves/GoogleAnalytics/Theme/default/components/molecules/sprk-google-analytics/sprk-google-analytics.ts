@@ -24,7 +24,10 @@ export default class SprkGoogleAnalytics extends Component {
         const customEvent = event as CustomEvent<Record<string, unknown>>;
 
         const payload: Record<string, unknown> = {
-            ...(customEvent.detail ?? {}),
+            search_term: customEvent.detail.searchTerm,
+            event_category: customEvent.detail.eventCategory,
+            event_label: customEvent.detail.eventLabel,
+            results_count: customEvent.detail.resultsCount,
             store: this.currentStore,
             locale: this.currentLocale,
         };
