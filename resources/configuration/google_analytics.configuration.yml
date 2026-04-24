@@ -6,7 +6,7 @@ features:
       enabled: true
       order: 0
       tabs:
-          - key: storefront2
+          - key: storefront
             name: Storefront
             description: Settings for the storefront tracking snippet.
             enabled: true
