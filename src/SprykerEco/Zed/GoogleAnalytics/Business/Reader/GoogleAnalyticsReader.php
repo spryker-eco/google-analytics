@@ -202,7 +202,6 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
     }
 
     /**
-     * @param \Generated\Shared\Transfer\GoogleAnalyticsEventCriteriaTransfer $googleAnalyticsEventCriteriaTransfer
      * @param array<string> $terms
      *
      * @return array<string, string>
@@ -290,8 +289,6 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
     /**
      * Builds a map of dimension name to its index in the response row, derived from the response headers.
      *
-     * @param \Google\Analytics\Data\V1beta\RunReportResponse $response
-     *
      * @return array<string, int>
      */
     protected function buildDimensionIndexMap(RunReportResponse $response): array
@@ -306,8 +303,6 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
     }
 
     /**
-     * @param \Google\Analytics\Data\V1beta\RunReportResponse $response
-     *
      * @return array<array{searchTerm: string, store: string|null, locale: string|null, count: int}>
      */
     protected function extractTermRows(RunReportResponse $response): array
@@ -345,8 +340,6 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
     }
 
     /**
-     * @param \Google\Analytics\Data\V1beta\RunReportResponse $response
-     *
      * @return array<string, string> Keyed by "term|store|locale" compound key
      */
     protected function buildLastOccurredMap(RunReportResponse $response): array
@@ -385,10 +378,7 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
     /**
      * @param array<array{searchTerm: string, store: string|null, locale: string|null, count: int}> $terms
      * @param array<string, string> $lastOccurredMap
-     * @param \Generated\Shared\Transfer\GoogleAnalyticsEventCriteriaTransfer $googleAnalyticsEventCriteriaTransfer
      * @param int $totalCount
-     *
-     * @return \Generated\Shared\Transfer\GoogleAnalyticsEventCollectionTransfer
      */
     protected function buildCollection(
         array $terms,

@@ -38,7 +38,10 @@ features:
                         description: >
                             GA4 Measurement ID (format: G-XXXXXXXXXX) used by the Google tag on the storefront.
                             Documentation: https://support.google.com/analytics/answer/9539598
-                        type: string
+                      - type: regex
+                        message: 'Must be a valid Secret Key (starts with sk_test_ or sk_live_).'
+                        options:
+                            pattern: '^G-[A-Z0-9]{6,}$'
                         default_value: ''
                         placeholder: 'G-xxxxxxx'
                         enabled: true

@@ -24,8 +24,6 @@ use Symfony\Component\HttpFoundation\Request;
 class SearchTermsController extends AbstractController
 {
     /**
-     * @param \Symfony\Component\HttpFoundation\Request $request
-     *
      * @return array<string, mixed>
      */
     public function indexAction(Request $request): array
