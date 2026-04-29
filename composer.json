@@ -32,9 +32,9 @@
     "minimum-stability": "dev",
     "prefer-stable": true,
     "scripts": {
-        "cs-check": "phpcs -p -s --standard=vendor/spryker/code-sniffer/SprykerStrict/ruleset.xml src/ tests/",
-        "cs-fix": "phpcbf -p --standard=vendor/spryker/code-sniffer/SprykerStrict/ruleset.xml src/ tests/",
-        "phpstan": "vendor/bin/phpstan analyse"
+        "cs-check": "phpcs -p -s src/ tests/",
+        "cs-fix": "phpcbf -p src/ tests/",
+        "stan": "phpstan analyse -c phpstan.neon -l 8 src/"
     },
     "extra": {
         "branch-alias": {
