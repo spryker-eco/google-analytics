@@ -13,6 +13,9 @@ use Spryker\Zed\Kernel\AbstractBundleConfig;
 
 class GoogleAnalyticsConfig extends AbstractBundleConfig
 {
+    protected const string CONFIGURATION_KEY_GOOGLE_ANALYTICS_STOREFRONT_TRACKING_ENABLED
+        = 'google_analytics:storefront:tracking:enabled';
+
     protected const string CONFIGURATION_KEY_GOOGLE_ANALYTICS_DATA_API_CONNECTION_PROPERTY_ID
         = 'google_analytics:data_api:connection:property_id';
 
@@ -39,6 +42,34 @@ class GoogleAnalyticsConfig extends AbstractBundleConfig
 
     /**
      * Specification:
+     * - Returns whether GA4 storefront tracking is enabled.
+     *
+     * @api
+     */
+    public function getIsTrackingEnabled(): bool
+    {
+        return (bool)$this->getModuleConfig(
+            static::CONFIGURATION_KEY_GOOGLE_ANALYTICS_STOREFRONT_TRACKING_ENABLED,
+            false,
+        );
+    }
+
+    /**
+     * Specification:
+     * - Returns the raw service account credentials JSON string without decoding.
+     *
+     * @api
+     */
+    public function getServiceAccountCredentialsJsonRaw(): string
+    {
+        return $this->getModuleConfig(
+            static::CONFIGURATION_KEY_GOOGLE_ANALYTICS_DATA_API_CONNECTION_SERVICE_ACCOUNT_CREDENTIALS_JSON,
+            '',
+        );
+    }
+
+    /**
+     * Specification:
      * - Returns the Google Analytics Data API property ID from module configuration.
      *
      * @api
@@ -53,17 +84,23 @@ class GoogleAnalyticsConfig extends AbstractBundleConfig
 
     /**
      * Specification:
-     * - Returns the service account credentials JSON string from module configuration.
+     * - Returns the decoded service account credentials JSON string from module configuration.
      * - Used to authenticate requests to the Google Analytics Data API.
      *
      * @api
      */
-    public function getServiceAccountCredentialsJson(): string
+    public function getServiceAccountCredentialsJson(): array
     {
-        return $this->getModuleConfig(
+        $serviceAccountCredentials = json_decode($this->getModuleConfig(
             static::CONFIGURATION_KEY_GOOGLE_ANALYTICS_DATA_API_CONNECTION_SERVICE_ACCOUNT_CREDENTIALS_JSON,
             '',
-        );
+        ), true);
+
+        if (!$serviceAccountCredentials) {
+            throw new RuntimeException('Google Analytics credentials are not configured.');
+        }
+
+        return $serviceAccountCredentials;
     }
 
     /**

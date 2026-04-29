@@ -9,7 +9,7 @@ declare(strict_types = 1);
 
 namespace SprykerEco\Zed\GoogleAnalytics\Communication\Builder;
 
-interface EventCriteriaBuilderInterface
+interface EventCriteriaResolverInterface
 {
     /**
      * @param array<string, mixed> $formData

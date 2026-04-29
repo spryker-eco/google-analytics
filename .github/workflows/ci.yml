@@ -1,52 +1,62 @@
 name: CI
 
 on:
-    push:
-        branches:
-            - 'master'
-    pull_request:
-    workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
 
 jobs:
     validation:
-        name: Validation
+        name: "Validation"
         runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                php-version:
+                    - '8.3'
+                    - '8.4'
+
+        env:
+            APPLICATION_ENV: devtest
+            APPLICATION_STORE: DE
+            PROJECT: google-analytics
 
         steps:
-            - uses: actions/checkout@v3
+            - uses: actions/checkout@v2
 
             - name: Setup PHP
               uses: shivammathur/setup-php@v2
               with:
-                  php-version: '8.4'
-                  extensions: mbstring, intl, bcmath
-                  coverage: none
+                  php-version: ${{ matrix.php-version }}
+                  extensions: mbstring, intl
+                  tools: composer:v2
 
-            - name: Composer Install
-              run: composer install --prefer-dist --no-interaction --profile
+            - name: Get Composer Cache Directory
+              id: composer-cache
+              run: |
+                  echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
 
-            - name: Run validation
+            - uses: actions/cache@v5
+              with:
+                  path: ${{ steps.composer-cache.outputs.dir }}
+                  key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+                  restore-keys: |
+                      ${{ runner.os }}-composer-
+
+            - name: Composer validate
               run: composer validate
 
-            - name: Syntax check
-              run: find ./src -path src -prune -o -type f -name '*.php' -print0 | xargs -0 -n1 -P4 php -l -n | (! grep -v "No syntax errors detected" )
+            - name: Composer install
+              run: composer install
 
-    lowest:
-        name: Prefer Lowest
-        runs-on: ubuntu-latest
+            - name: Codeception Build
+              run: |
+                vendor/bin/codecept build
 
-        steps:
-            - uses: actions/checkout@v3
+            - name: Run CodeStyle checks
+              run: composer cs-check
 
-            - name: Setup PHP
-              uses: shivammathur/setup-php@v2
-              with:
-                  php-version: '8.3'
-                  extensions: mbstring, intl, bcmath
-                  coverage: none
-
-            - name: Composer Install
-              run: composer install --prefer-dist --no-interaction --profile
-
-            - name: Composer Update
-              run: composer update --prefer-lowest --prefer-dist --no-interaction --profile -vvv
+            - name: Run PHPStan
+              run: composer phpstan

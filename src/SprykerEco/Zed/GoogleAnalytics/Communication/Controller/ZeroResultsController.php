@@ -56,7 +56,7 @@ class ZeroResultsController extends AbstractController
      */
     protected function createTable(array $formData): ZeroResultsTable
     {
-        $dates = $this->getFactory()->createEventCriteriaBuilder()->resolveDateRange($formData);
+        $dates = $this->getFactory()->createEventCriteriaResolver()->resolveDateRange($formData);
 
         return $this->getFactory()->createZeroResultsTable(
             (new GoogleAnalyticsEventCriteriaTransfer())

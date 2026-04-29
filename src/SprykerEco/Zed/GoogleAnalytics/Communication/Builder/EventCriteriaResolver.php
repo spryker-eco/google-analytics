@@ -10,16 +10,11 @@ declare(strict_types = 1);
 namespace SprykerEco\Zed\GoogleAnalytics\Communication\Builder;
 
 use DateTime;
+use SprykerEco\Zed\GoogleAnalytics\Communication\Form\AbstractGoogleAnalyticsFilterForm;
 
-class EventCriteriaBuilder implements EventCriteriaBuilderInterface
+class EventCriteriaResolver implements EventCriteriaBuilderInterface
 {
     protected const string DATE_FORMAT = 'Y-m-d';
-
-    protected const string FIELD_DATE_RANGE_PRESET = 'dateRangePreset';
-
-    protected const string FIELD_START_DATE = 'startDate';
-
-    protected const string FIELD_END_DATE = 'endDate';
 
     /**
      * @param array<string, mixed> $formData
@@ -28,7 +23,7 @@ class EventCriteriaBuilder implements EventCriteriaBuilderInterface
      */
     public function resolveDateRange(array $formData): ?array
     {
-        $dateRangePreset = $formData[static::FIELD_DATE_RANGE_PRESET] ?? null;
+        $dateRangePreset = $formData[AbstractGoogleAnalyticsFilterForm::FIELD_DATE_RANGE_PRESET] ?? null;
 
         if ($dateRangePreset) {
             return [
@@ -37,8 +32,8 @@ class EventCriteriaBuilder implements EventCriteriaBuilderInterface
             ];
         }
 
-        $startDate = $formData[static::FIELD_START_DATE] ?? null;
-        $endDate = $formData[static::FIELD_END_DATE] ?? null;
+        $startDate = $formData[AbstractGoogleAnalyticsFilterForm::FIELD_START_DATE] ?? null;
+        $endDate = $formData[AbstractGoogleAnalyticsFilterForm::FIELD_END_DATE] ?? null;
 
         if (!$startDate instanceof DateTime || !$endDate instanceof DateTime) {
             return null;

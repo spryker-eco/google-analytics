@@ -56,7 +56,7 @@ class SearchTermsController extends AbstractController
      */
     protected function createTable(array $formData): SearchTermsTable
     {
-        $dates = $this->getFactory()->createEventCriteriaBuilder()->resolveDateRange($formData);
+        $dates = $this->getFactory()->createEventCriteriaResolver()->resolveDateRange($formData);
 
         return $this->getFactory()->createSearchTermsTable(
             (new GoogleAnalyticsEventCriteriaTransfer())->setConditions(

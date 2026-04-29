@@ -133,16 +133,14 @@ class SearchStatisticsController extends AbstractController
         string $eventName,
         array $formData,
     ): GoogleAnalyticsEventCriteriaTransfer {
-        $dates = $this->getFactory()->createEventCriteriaBuilder()->resolveDateRange($formData);
-        $store = $formData[OverviewFilterForm::FIELD_STORE] ?? null;
-        $locale = $formData[OverviewFilterForm::FIELD_LOCALE] ?? null;
+        $dates = $this->getFactory()->createEventCriteriaResolver()->resolveDateRange($formData);
 
         $conditions = (new GoogleAnalyticsEventConditionsTransfer())
             ->setEventName($eventName)
             ->setStartDate($dates['startDate'] ?? null)
             ->setEndDate($dates['endDate'] ?? null)
-            ->setStore($store)
-            ->setLocale($locale);
+            ->setStore($formData[OverviewFilterForm::FIELD_STORE] ?? null)
+            ->setLocale($formData[OverviewFilterForm::FIELD_LOCALE] ?? null);
 
         $sortTransfer = (new SortTransfer())
             ->setField(GoogleAnalyticsEventTransfer::COUNT);

@@ -110,13 +110,13 @@ class SearchTermsTable extends AbstractTable
 
         $results = [];
 
-        foreach ($googleAnalyticsEventCollectionTransfer->getEvents() as $event) {
+        foreach ($googleAnalyticsEventCollectionTransfer->getEvents() as $googleAnalyticsEventTransfer) {
             $results[] = [
-                static::COL_SEARCH_TERM => $event->getSearchTerm(),
-                static::COL_STORE => $event->getStore() ?? '-',
-                static::COL_LOCALE => $event->getLocale() ?? '-',
-                static::COL_COUNT => $event->getCount(),
-                static::COL_LAST_OCCURRED_AT => $event->getLastOccurredAt() ?? '-',
+                static::COL_SEARCH_TERM => $googleAnalyticsEventTransfer->getSearchTerm(),
+                static::COL_STORE => $googleAnalyticsEventTransfer->getStore() ?? '-',
+                static::COL_LOCALE => $googleAnalyticsEventTransfer->getLocale() ?? '-',
+                static::COL_COUNT => $googleAnalyticsEventTransfer->getCount(),
+                static::COL_LAST_OCCURRED_AT => $googleAnalyticsEventTransfer->getLastOccurredAt() ?? '-',
             ];
         }
 

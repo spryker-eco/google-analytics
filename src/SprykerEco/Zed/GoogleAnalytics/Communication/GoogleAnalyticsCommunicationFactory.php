@@ -13,8 +13,8 @@ use Generated\Shared\Transfer\GoogleAnalyticsEventCriteriaTransfer;
 use Spryker\Zed\Kernel\Communication\AbstractCommunicationFactory;
 use Spryker\Zed\Locale\Business\LocaleFacadeInterface;
 use Spryker\Zed\Store\Business\StoreFacadeInterface;
-use SprykerEco\Zed\GoogleAnalytics\Communication\Builder\EventCriteriaBuilder;
-use SprykerEco\Zed\GoogleAnalytics\Communication\Builder\EventCriteriaBuilderInterface;
+use SprykerEco\Zed\GoogleAnalytics\Communication\Builder\EventCriteriaResolver;
+use SprykerEco\Zed\GoogleAnalytics\Communication\Builder\EventCriteriaResolverInterface;
 use SprykerEco\Zed\GoogleAnalytics\Communication\Form\DataProvider\OverviewFilterFormDataProvider;
 use SprykerEco\Zed\GoogleAnalytics\Communication\Form\OverviewFilterForm;
 use SprykerEco\Zed\GoogleAnalytics\Communication\Form\SearchTermsFilterForm;
@@ -57,9 +57,9 @@ class GoogleAnalyticsCommunicationFactory extends AbstractCommunicationFactory
         );
     }
 
-    public function createEventCriteriaBuilder(): EventCriteriaBuilderInterface
+    public function createEventCriteriaResolver(): EventCriteriaResolverInterface
     {
-        return new EventCriteriaBuilder();
+        return new EventCriteriaResolver();
     }
 
     public function createSearchTermsTable(

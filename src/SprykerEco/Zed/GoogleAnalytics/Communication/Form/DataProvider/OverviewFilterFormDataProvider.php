@@ -46,7 +46,7 @@ class OverviewFilterFormDataProvider
     /**
      * @return array<string, string>
      */
-    public function getStoreChoices(): array
+    protected function getStoreChoices(): array
     {
         $choices = [];
 
@@ -61,7 +61,7 @@ class OverviewFilterFormDataProvider
     /**
      * @return array<string, string>
      */
-    public function getLocaleChoices(): array
+    protected function getLocaleChoices(): array
     {
         $choices = [];
 

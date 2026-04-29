@@ -24,6 +24,7 @@ use Codeception\Actor;
  * @method void lookForwardTo($achieveValue)
  * @method void comment($description)
  * @method void pause($vars = [])
+ * @method \SprykerEco\Zed\GoogleAnalytics\Business\GoogleAnalyticsFacadeInterface getFacade(?string $moduleName = null)
  *
  * @SuppressWarnings(PHPMD)
  */

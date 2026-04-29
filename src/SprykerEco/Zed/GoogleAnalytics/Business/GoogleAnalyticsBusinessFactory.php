@@ -10,7 +10,6 @@ declare(strict_types = 1);
 namespace SprykerEco\Zed\GoogleAnalytics\Business;
 
 use Google\Analytics\Data\V1beta\Client\BetaAnalyticsDataClient;
-use RuntimeException;
 use Spryker\Zed\Kernel\Business\AbstractBusinessFactory;
 use SprykerEco\Zed\GoogleAnalytics\Business\Client\GoogleAnalyticsDataClient;
 use SprykerEco\Zed\GoogleAnalytics\Business\Client\GoogleAnalyticsDataClientInterface;
@@ -34,14 +33,8 @@ class GoogleAnalyticsBusinessFactory extends AbstractBusinessFactory
 
     public function createBetaAnalyticsDataClient(): BetaAnalyticsDataClient
     {
-        $credentials = json_decode($this->getConfig()->getServiceAccountCredentialsJson(), true);
-
-        if (!$credentials) {
-            throw new RuntimeException('Google Analytics credentials are not configured.');
-        }
-
         return new BetaAnalyticsDataClient([
-            'credentials' => $credentials,
+            'credentials' => $this->getConfig()->getServiceAccountCredentialsJson(),
             'transport' => 'rest',
         ]);
     }

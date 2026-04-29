@@ -7,7 +7,7 @@
 
 declare(strict_types = 1);
 
-namespace SprykerEcoTest\Zed\GoogleAnalytics\Business\Reader;
+namespace SprykerEcoTest\Zed\GoogleAnalytics\Business;
 
 use Codeception\Test\Unit;
 use DateTime;
@@ -20,83 +20,107 @@ use Google\Analytics\Data\V1beta\MetricValue;
 use Google\Analytics\Data\V1beta\Row;
 use Google\Analytics\Data\V1beta\RunReportResponse;
 use SprykerEco\Zed\GoogleAnalytics\Business\Client\GoogleAnalyticsDataClientInterface;
+use SprykerEco\Zed\GoogleAnalytics\Business\GoogleAnalyticsFacadeInterface;
 use SprykerEco\Zed\GoogleAnalytics\Business\Reader\GoogleAnalyticsReader;
 use SprykerEco\Zed\GoogleAnalytics\GoogleAnalyticsConfig;
+use SprykerEcoTest\Zed\GoogleAnalytics\GoogleAnalyticsBusinessTester;
 
 /**
  * @group SprykerEcoTest
  * @group Zed
  * @group GoogleAnalytics
  * @group Business
- * @group Reader
- * @group GoogleAnalyticsReaderTest
+ * @group GoogleAnalyticsFacadeTest
  */
-class GoogleAnalyticsReaderTest extends Unit
+class GoogleAnalyticsFacadeTest extends Unit
 {
+    protected GoogleAnalyticsBusinessTester $tester;
+
     protected const string DEFAULT_DATE_RANGE_PRESET = '-7 days';
 
     public function testGetEventCollectionAppliesDefaultDateRangeWhenNoneProvided(): void
     {
+        // Arrange
         $config = $this->buildConfigMock();
         $config->method('getDefaultDateRangePreset')->willReturn(static::DEFAULT_DATE_RANGE_PRESET);
 
         $expectedStartDate = (new DateTime(static::DEFAULT_DATE_RANGE_PRESET))->format('Y-m-d');
         $expectedEndDate = (new DateTime())->format('Y-m-d');
 
-        $reader = $this->buildReader($config, $this->buildClientMock(new RunReportResponse()));
+        $facade = $this->buildFacade($config, $this->buildClientMock(new RunReportResponse()));
 
         $conditions = (new GoogleAnalyticsEventConditionsTransfer())->setEventName('search_results');
-        $reader->getEventCollection($this->buildCriteria($conditions));
 
+        // Act
+        $facade->getEventCollection($this->buildCriteria($conditions));
+
+        // Assert
         $this->assertSame($expectedStartDate, $conditions->getStartDate());
         $this->assertSame($expectedEndDate, $conditions->getEndDate());
     }
 
     public function testGetEventCollectionPreservesProvidedDateRange(): void
     {
-        $reader = $this->buildReader($this->buildConfigMock(), $this->buildClientMock(new RunReportResponse()));
+        // Arrange
+        $facade = $this->buildFacade($this->buildConfigMock(), $this->buildClientMock(new RunReportResponse()));
 
         $conditions = (new GoogleAnalyticsEventConditionsTransfer())
             ->setEventName('search_results')
             ->setStartDate('2024-01-01')
             ->setEndDate('2024-01-31');
-        $reader->getEventCollection($this->buildCriteria($conditions));
 
+        // Act
+        $facade->getEventCollection($this->buildCriteria($conditions));
+
+        // Assert
         $this->assertSame('2024-01-01', $conditions->getStartDate());
         $this->assertSame('2024-01-31', $conditions->getEndDate());
     }
 
     public function testGetEventCollectionDoesNotCallDefaultPresetWhenBothDatesProvided(): void
     {
+        // Arrange
         $config = $this->buildConfigMock();
         $config->expects($this->never())->method('getDefaultDateRangePreset');
 
-        $reader = $this->buildReader($config, $this->buildClientMock(new RunReportResponse()));
+        $facade = $this->buildFacade($config, $this->buildClientMock(new RunReportResponse()));
 
         $conditions = (new GoogleAnalyticsEventConditionsTransfer())
             ->setEventName('search_results')
             ->setStartDate('2024-06-01')
             ->setEndDate('2024-06-30');
-        $reader->getEventCollection($this->buildCriteria($conditions));
+
+        // Act
+        $facade->getEventCollection($this->buildCriteria($conditions));
+
+        // Assert
+        $this->assertSame('2024-06-01', $conditions->getStartDate());
+        $this->assertSame('2024-06-30', $conditions->getEndDate());
     }
 
     public function testGetEventCollectionReturnsEmptyCollectionWhenApiReturnsNoRows(): void
     {
-        $reader = $this->buildReader($this->buildConfigMock(), $this->buildClientMock(new RunReportResponse()));
+        // Arrange
+        $facade = $this->buildFacade($this->buildConfigMock(), $this->buildClientMock(new RunReportResponse()));
 
-        $collection = $reader->getEventCollection($this->buildCriteriaWithDateRange('2024-01-01', '2024-01-31'));
+        // Act
+        $collection = $facade->getEventCollection($this->buildCriteriaWithDateRange('2024-01-01', '2024-01-31'));
 
+        // Assert
         $this->assertCount(0, $collection->getEvents());
         $this->assertSame(0, $collection->getPagination()->getNbResults());
     }
 
     public function testGetEventCollectionMapsSearchTermFromApiResponse(): void
     {
-        $reader = $this->buildReader($this->buildConfigMock(), $this->buildClientMock($this->buildSingleRowResponse('blue shoes', 42)));
+        // Arrange
+        $facade = $this->buildFacade($this->buildConfigMock(), $this->buildClientMock($this->buildSingleRowResponse('blue shoes', 42)));
 
-        $collection = $reader->getEventCollection($this->buildCriteriaWithDateRange('2024-01-01', '2024-01-31'));
+        // Act
+        $collection = $facade->getEventCollection($this->buildCriteriaWithDateRange('2024-01-01', '2024-01-31'));
         $events = $collection->getEvents();
 
+        // Assert
         $this->assertCount(1, $events);
         $this->assertSame('blue shoes', $events[0]->getSearchTerm());
         $this->assertSame(42, $events[0]->getCount());
@@ -106,6 +130,7 @@ class GoogleAnalyticsReaderTest extends Unit
 
     public function testGetEventCollectionSetsNbResultsFromApiRowCount(): void
     {
+        // Arrange
         $response = new RunReportResponse([
             'dimension_headers' => [new DimensionHeader(['name' => 'searchTerm'])],
             'rows' => [
@@ -117,10 +142,12 @@ class GoogleAnalyticsReaderTest extends Unit
             'row_count' => 99,
         ]);
 
-        $reader = $this->buildReader($this->buildConfigMock(), $this->buildClientMock($response));
+        $facade = $this->buildFacade($this->buildConfigMock(), $this->buildClientMock($response));
 
-        $collection = $reader->getEventCollection($this->buildCriteriaWithDateRange('2024-01-01', '2024-01-31'));
+        // Act
+        $collection = $facade->getEventCollection($this->buildCriteriaWithDateRange('2024-01-01', '2024-01-31'));
 
+        // Assert
         $this->assertSame(99, $collection->getPagination()->getNbResults());
     }
 
@@ -151,10 +178,10 @@ class GoogleAnalyticsReaderTest extends Unit
             'row_count' => 1,
         ]);
 
-        $reader = $this->buildReader($config, $this->buildClientMock($response));
+        $facade = $this->buildFacade($config, $this->buildClientMock($response));
 
         // Act
-        $collection = $reader->getEventCollection($this->buildCriteriaWithDateRange('2024-01-01', '2024-01-31'));
+        $collection = $facade->getEventCollection($this->buildCriteriaWithDateRange('2024-01-01', '2024-01-31'));
 
         // Assert
         $events = $collection->getEvents();
@@ -167,6 +194,7 @@ class GoogleAnalyticsReaderTest extends Unit
 
     public function testGetEventCollectionNormalizesGa4NotSetSentinelToNull(): void
     {
+        // Arrange
         $config = $this->buildConfigMock();
         $config->method('getStoreDimensionName')->willReturn('customEvent:store');
         $config->method('getLocaleDimensionName')->willReturn(null);
@@ -188,17 +216,20 @@ class GoogleAnalyticsReaderTest extends Unit
             'row_count' => 1,
         ]);
 
-        $reader = $this->buildReader($config, $this->buildClientMock($response));
+        $facade = $this->buildFacade($config, $this->buildClientMock($response));
 
-        $collection = $reader->getEventCollection($this->buildCriteriaWithDateRange('2024-01-01', '2024-01-31'));
+        // Act
+        $collection = $facade->getEventCollection($this->buildCriteriaWithDateRange('2024-01-01', '2024-01-31'));
         $events = $collection->getEvents();
 
+        // Assert
         $this->assertCount(1, $events);
         $this->assertNull($events[0]->getStore());
     }
 
     public function testGetEventCollectionPopulatesLastOccurredAtWhenRequested(): void
     {
+        // Arrange
         $config = $this->buildConfigMock();
 
         // First call (terms report) returns the term; second call (dates report) returns date row.
@@ -239,17 +270,22 @@ class GoogleAnalyticsReaderTest extends Unit
             ->setEndDate('2024-01-31')
             ->setWithLastOccurred(true);
 
-        $reader = $this->buildReader($config, $client);
-        $collection = $reader->getEventCollection($this->buildCriteria($conditions));
+        $facade = $this->buildFacade($config, $client);
+
+        // Act
+        $collection = $facade->getEventCollection($this->buildCriteria($conditions));
         $events = $collection->getEvents();
 
+        // Assert
         $this->assertCount(1, $events);
         $this->assertSame('2024-01-15', $events[0]->getLastOccurredAt());
     }
 
-    protected function buildReader(GoogleAnalyticsConfig $config, GoogleAnalyticsDataClientInterface $client): GoogleAnalyticsReader
+    protected function buildFacade(GoogleAnalyticsConfig $config, GoogleAnalyticsDataClientInterface $client): GoogleAnalyticsFacadeInterface
     {
-        return new GoogleAnalyticsReader($config, $client);
+        $this->tester->mockFactoryMethod('createGoogleAnalyticsReader', new GoogleAnalyticsReader($config, $client));
+
+        return $this->tester->getFacade();
     }
 
     protected function buildCriteria(GoogleAnalyticsEventConditionsTransfer $conditions): GoogleAnalyticsEventCriteriaTransfer

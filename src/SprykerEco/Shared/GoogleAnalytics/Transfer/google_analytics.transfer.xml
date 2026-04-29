@@ -22,6 +22,25 @@
         <property name="locale" type="string"/>
     </transfer>
 
+    <transfer name="Pagination">
+        <property name="limit" type="int"/>
+        <property name="offset" type="int"/>
+        <property name="nbResults" type="int"/>
+        <property name="maxPerPage" type="int"/>
+        <property name="page" type="int"/>
+        <property name="firstIndex" type="int"/>
+        <property name="lastIndex" type="int"/>
+        <property name="firstPage" type="int"/>
+        <property name="lastPage" type="int"/>
+        <property name="nextPage" type="int"/>
+        <property name="previousPage" type="int"/>
+    </transfer>
+
+    <transfer name="Sort">
+        <property name="field" type="string"/>
+        <property name="isAscending" type="bool"/>
+    </transfer>
+
     <transfer name="GoogleAnalyticsEventCriteria" strict="true">
         <property name="conditions" type="GoogleAnalyticsEventConditions"/>
         <property name="pagination" type="Pagination"/>

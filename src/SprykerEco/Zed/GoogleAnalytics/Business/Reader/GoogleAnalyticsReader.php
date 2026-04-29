@@ -280,15 +280,7 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
      */
     protected function buildDatesDimensions(): array
     {
-        $dimensions = [new Dimension(['name' => static::DIMENSION_SEARCH_TERM])];
-
-        if ($this->googleAnalyticsConfig->getStoreDimensionName()) {
-            $dimensions[] = new Dimension(['name' => $this->googleAnalyticsConfig->getStoreDimensionName()]);
-        }
-
-        if ($this->googleAnalyticsConfig->getLocaleDimensionName()) {
-            $dimensions[] = new Dimension(['name' => $this->googleAnalyticsConfig->getLocaleDimensionName()]);
-        }
+        $dimensions = $this->buildTermsDimensions();
 
         $dimensions[] = new Dimension(['name' => static::DIMENSION_DATE]);
 
@@ -406,15 +398,15 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
     ): GoogleAnalyticsEventCollectionTransfer {
         $googleAnalyticsEventCollectionTransfer = new GoogleAnalyticsEventCollectionTransfer();
 
-        foreach ($terms as $row) {
-            $lastOccurredKey = sprintf('%s|%s|%s', $row['searchTerm'], $row['store'] ?? '', $row['locale'] ?? '');
+        foreach ($terms as $term) {
+            $lastOccurredKey = sprintf('%s|%s|%s', $term['searchTerm'], $term['store'] ?? '', $term['locale'] ?? '');
 
             $googleAnalyticsEventCollectionTransfer->addEvent(
                 (new GoogleAnalyticsEventTransfer())
-                    ->setSearchTerm($row['searchTerm'])
-                    ->setStore($row['store'])
-                    ->setLocale($row['locale'])
-                    ->setCount($row['count'])
+                    ->setSearchTerm($term['searchTerm'])
+                    ->setStore($term['store'])
+                    ->setLocale($term['locale'])
+                    ->setCount($term['count'])
                     ->setLastOccurredAt($lastOccurredMap[$lastOccurredKey] ?? null),
             );
         }
