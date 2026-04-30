@@ -1,23 +1,20 @@
 <?php
 
 /**
- * This file is part of the Spryker Suite.
- * For full license information, please view the LICENSE file that was distributed with this source code.
+ * Copyright © 2016-present Spryker Systems GmbH. All rights reserved.
+ * Use of this software requires acceptance of the Evaluation License Agreement. See LICENSE file.
  */
 
-namespace SprykerEco\Zed\GoogleAnalytics\Communication\Builder;
+declare(strict_types = 1);
+
+namespace SprykerEco\Zed\GoogleAnalytics\Communication\Resolver;
 
 use DateTime;
+use SprykerEco\Zed\GoogleAnalytics\Communication\Form\AbstractGoogleAnalyticsFilterForm;
 
-class EventCriteriaBuilder implements EventCriteriaBuilderInterface
+class EventCriteriaResolver implements EventCriteriaResolverInterface
 {
     protected const string DATE_FORMAT = 'Y-m-d';
-
-    protected const string FIELD_DATE_RANGE_PRESET = 'dateRangePreset';
-
-    protected const string FIELD_START_DATE = 'startDate';
-
-    protected const string FIELD_END_DATE = 'endDate';
 
     /**
      * @param array<string, mixed> $formData
@@ -26,7 +23,7 @@ class EventCriteriaBuilder implements EventCriteriaBuilderInterface
      */
     public function resolveDateRange(array $formData): ?array
     {
-        $dateRangePreset = $formData[static::FIELD_DATE_RANGE_PRESET] ?? null;
+        $dateRangePreset = $formData[AbstractGoogleAnalyticsFilterForm::FIELD_DATE_RANGE_PRESET] ?? null;
 
         if ($dateRangePreset) {
             return [
@@ -35,8 +32,8 @@ class EventCriteriaBuilder implements EventCriteriaBuilderInterface
             ];
         }
 
-        $startDate = $formData[static::FIELD_START_DATE] ?? null;
-        $endDate = $formData[static::FIELD_END_DATE] ?? null;
+        $startDate = $formData[AbstractGoogleAnalyticsFilterForm::FIELD_START_DATE] ?? null;
+        $endDate = $formData[AbstractGoogleAnalyticsFilterForm::FIELD_END_DATE] ?? null;
 
         if (!$startDate instanceof DateTime || !$endDate instanceof DateTime) {
             return null;

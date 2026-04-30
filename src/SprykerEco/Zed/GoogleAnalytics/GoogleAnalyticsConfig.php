@@ -1,11 +1,11 @@
 <?php
 
 /**
- * This file is part of the Spryker Suite.
- * For full license information, please view the LICENSE file that was distributed with this source code.
+ * Copyright © 2016-present Spryker Systems GmbH. All rights reserved.
+ * Use of this software requires acceptance of the Evaluation License Agreement. See LICENSE file.
  */
 
-declare(strict_types=1);
+declare(strict_types = 1);
 
 namespace SprykerEco\Zed\GoogleAnalytics;
 
@@ -53,17 +53,23 @@ class GoogleAnalyticsConfig extends AbstractBundleConfig
 
     /**
      * Specification:
-     * - Returns the service account credentials JSON string from module configuration.
+     * - Returns the decoded service account credentials JSON string from module configuration.
      * - Used to authenticate requests to the Google Analytics Data API.
      *
      * @api
      */
-    public function getServiceAccountCredentialsJson(): string
+    public function getServiceAccountCredentialsJson(): array
     {
-        return $this->getModuleConfig(
+        $serviceAccountCredentials = json_decode($this->getModuleConfig(
             static::CONFIGURATION_KEY_GOOGLE_ANALYTICS_DATA_API_CONNECTION_SERVICE_ACCOUNT_CREDENTIALS_JSON,
             '',
-        );
+        ), true);
+
+        if (!$serviceAccountCredentials) {
+            throw new RuntimeException('Google Analytics credentials are not configured.');
+        }
+
+        return $serviceAccountCredentials;
     }
 
     /**

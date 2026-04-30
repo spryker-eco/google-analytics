@@ -1,9 +1,11 @@
 <?php
 
 /**
- * This file is part of the Spryker Suite.
- * For full license information, please view the LICENSE file that was distributed with this source code.
+ * Copyright © 2016-present Spryker Systems GmbH. All rights reserved.
+ * Use of this software requires acceptance of the Evaluation License Agreement. See LICENSE file.
  */
+
+declare(strict_types = 1);
 
 namespace SprykerEco\Zed\GoogleAnalytics\Communication\Controller;
 
@@ -52,7 +54,7 @@ class ZeroResultsController extends AbstractController
      */
     protected function createTable(array $formData): ZeroResultsTable
     {
-        $dates = $this->getFactory()->createEventCriteriaBuilder()->resolveDateRange($formData);
+        $dates = $this->getFactory()->createEventCriteriaResolver()->resolveDateRange($formData);
 
         return $this->getFactory()->createZeroResultsTable(
             (new GoogleAnalyticsEventCriteriaTransfer())

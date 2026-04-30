@@ -1,9 +1,11 @@
 <?php
 
 /**
- * This file is part of the Spryker Suite.
- * For full license information, please view the LICENSE file that was distributed with this source code.
+ * Copyright © 2016-present Spryker Systems GmbH. All rights reserved.
+ * Use of this software requires acceptance of the Evaluation License Agreement. See LICENSE file.
  */
+
+declare(strict_types = 1);
 
 namespace SprykerEco\Zed\GoogleAnalytics\Communication\Form\DataProvider;
 
@@ -41,13 +43,10 @@ class OverviewFilterFormDataProvider
         ];
     }
 
-    // Stores and locales are bounded data sets (typically < 50 items per installation).
-    // If the dataset grows significantly, replace with an async autocomplete (Option B).
-
     /**
      * @return array<string, string>
      */
-    public function getStoreChoices(): array
+    protected function getStoreChoices(): array
     {
         $choices = [];
 
@@ -62,7 +61,7 @@ class OverviewFilterFormDataProvider
     /**
      * @return array<string, string>
      */
-    public function getLocaleChoices(): array
+    protected function getLocaleChoices(): array
     {
         $choices = [];
 

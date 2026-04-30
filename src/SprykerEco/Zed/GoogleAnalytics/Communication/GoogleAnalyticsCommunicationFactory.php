@@ -1,9 +1,11 @@
 <?php
 
 /**
- * This file is part of the Spryker Suite.
- * For full license information, please view the LICENSE file that was distributed with this source code.
+ * Copyright © 2016-present Spryker Systems GmbH. All rights reserved.
+ * Use of this software requires acceptance of the Evaluation License Agreement. See LICENSE file.
  */
+
+declare(strict_types = 1);
 
 namespace SprykerEco\Zed\GoogleAnalytics\Communication;
 
@@ -11,8 +13,8 @@ use Generated\Shared\Transfer\GoogleAnalyticsEventCriteriaTransfer;
 use Spryker\Zed\Kernel\Communication\AbstractCommunicationFactory;
 use Spryker\Zed\Locale\Business\LocaleFacadeInterface;
 use Spryker\Zed\Store\Business\StoreFacadeInterface;
-use SprykerEco\Zed\GoogleAnalytics\Communication\Builder\EventCriteriaBuilder;
-use SprykerEco\Zed\GoogleAnalytics\Communication\Builder\EventCriteriaBuilderInterface;
+use SprykerEco\Zed\GoogleAnalytics\Communication\Resolver\EventCriteriaResolver;
+use SprykerEco\Zed\GoogleAnalytics\Communication\Resolver\EventCriteriaResolverInterface;
 use SprykerEco\Zed\GoogleAnalytics\Communication\Form\DataProvider\OverviewFilterFormDataProvider;
 use SprykerEco\Zed\GoogleAnalytics\Communication\Form\OverviewFilterForm;
 use SprykerEco\Zed\GoogleAnalytics\Communication\Form\SearchTermsFilterForm;
@@ -55,9 +57,9 @@ class GoogleAnalyticsCommunicationFactory extends AbstractCommunicationFactory
         );
     }
 
-    public function createEventCriteriaBuilder(): EventCriteriaBuilderInterface
+    public function createEventCriteriaResolver(): EventCriteriaResolverInterface
     {
-        return new EventCriteriaBuilder();
+        return new EventCriteriaResolver();
     }
 
     public function createSearchTermsTable(

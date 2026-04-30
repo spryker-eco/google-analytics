@@ -1,9 +1,11 @@
 <?php
 
 /**
- * This file is part of the Spryker Suite.
- * For full license information, please view the LICENSE file that was distributed with this source code.
+ * Copyright © 2016-present Spryker Systems GmbH. All rights reserved.
+ * Use of this software requires acceptance of the Evaluation License Agreement. See LICENSE file.
  */
+
+declare(strict_types = 1);
 
 namespace SprykerEco\Zed\GoogleAnalytics\Communication\Controller;
 
@@ -126,16 +128,14 @@ class SearchStatisticsController extends AbstractController
         string $eventName,
         array $formData,
     ): GoogleAnalyticsEventCriteriaTransfer {
-        $dates = $this->getFactory()->createEventCriteriaBuilder()->resolveDateRange($formData);
-        $store = $formData[OverviewFilterForm::FIELD_STORE] ?? null;
-        $locale = $formData[OverviewFilterForm::FIELD_LOCALE] ?? null;
+        $dates = $this->getFactory()->createEventCriteriaResolver()->resolveDateRange($formData);
 
         $conditions = (new GoogleAnalyticsEventConditionsTransfer())
             ->setEventName($eventName)
             ->setStartDate($dates['startDate'] ?? null)
             ->setEndDate($dates['endDate'] ?? null)
-            ->setStore($store)
-            ->setLocale($locale);
+            ->setStore($formData[OverviewFilterForm::FIELD_STORE] ?? null)
+            ->setLocale($formData[OverviewFilterForm::FIELD_LOCALE] ?? null);
 
         $sortTransfer = (new SortTransfer())
             ->setField(GoogleAnalyticsEventTransfer::COUNT);

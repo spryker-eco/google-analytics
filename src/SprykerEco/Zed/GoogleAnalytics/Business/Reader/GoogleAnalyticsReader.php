@@ -1,11 +1,11 @@
 <?php
 
 /**
- * This file is part of the Spryker Suite.
- * For full license information, please view the LICENSE file that was distributed with this source code.
+ * Copyright © 2016-present Spryker Systems GmbH. All rights reserved.
+ * Use of this software requires acceptance of the Evaluation License Agreement. See LICENSE file.
  */
 
-declare(strict_types=1);
+declare(strict_types = 1);
 
 namespace SprykerEco\Zed\GoogleAnalytics\Business\Reader;
 
@@ -93,41 +93,41 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
     }
 
     protected function runTermsReport(
-        GoogleAnalyticsEventCriteriaTransfer $criteriaTransfer,
+        GoogleAnalyticsEventCriteriaTransfer $googleAnalyticsEventCriteriaTransfer,
     ): RunReportResponse {
-        $conditions = $criteriaTransfer->getConditions();
-        $pagination = $criteriaTransfer->getPagination();
+        $googleAnalyticsEventConditionsTransfer = $googleAnalyticsEventCriteriaTransfer->getConditionsOrFail();
+        $paginationTransfer = $googleAnalyticsEventCriteriaTransfer->getPaginationOrFail();
 
         $request = new RunReportRequest([
             'property' => sprintf('properties/%s', $this->googleAnalyticsConfig->getPropertyId()),
             'date_ranges' => [
                 new DateRange([
-                    'start_date' => $conditions->getStartDate(),
-                    'end_date' => $conditions->getEndDate(),
+                    'start_date' => $googleAnalyticsEventConditionsTransfer->getStartDate(),
+                    'end_date' => $googleAnalyticsEventConditionsTransfer->getEndDate(),
                 ]),
             ],
             'dimensions' => $this->buildTermsDimensions(),
             'metrics' => [
                 new Metric(['name' => static::METRIC_EVENT_COUNT]),
             ],
-            'dimension_filter' => $this->buildTermsReportDimensionFilter($conditions),
+            'dimension_filter' => $this->buildTermsReportDimensionFilter($googleAnalyticsEventConditionsTransfer),
             'order_bys' => [
                 new OrderBy([
                     'metric' => new MetricOrderBy(['metric_name' => static::METRIC_EVENT_COUNT]),
-                    'desc' => $this->isDescendingSort($criteriaTransfer),
+                    'desc' => $this->isDescendingSort($googleAnalyticsEventCriteriaTransfer),
                 ]),
             ],
-            'limit' => $pagination->getLimit(),
-            'offset' => $pagination->getOffset(),
+            'limit' => $paginationTransfer->getLimit(),
+            'offset' => $paginationTransfer->getOffset(),
         ]);
 
-        if ($conditions->getMinimumCount() > 0) {
+        if ($googleAnalyticsEventConditionsTransfer->getMinimumCount() > 0) {
             $request->setMetricFilter(new FilterExpression([
                 'filter' => new Filter([
                     'field_name' => static::METRIC_EVENT_COUNT,
                     'numeric_filter' => new NumericFilter([
                         'operation' => Operation::GREATER_THAN_OR_EQUAL,
-                        'value' => new NumericValue(['int64_value' => $conditions->getMinimumCount()]),
+                        'value' => new NumericValue(['int64_value' => $googleAnalyticsEventConditionsTransfer->getMinimumCount()]),
                     ]),
                 ]),
             ]));
@@ -207,17 +207,17 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
      * @return array<string, string>
      */
     protected function runDatesReport(
-        GoogleAnalyticsEventCriteriaTransfer $criteriaTransfer,
+        GoogleAnalyticsEventCriteriaTransfer $googleAnalyticsEventCriteriaTransfer,
         array $terms,
     ): array {
-        $conditions = $criteriaTransfer->getConditions();
+        $googleAnalyticsEventConditionsTransfer = $googleAnalyticsEventCriteriaTransfer->getConditionsOrFail();
 
         $request = new RunReportRequest([
             'property' => sprintf('properties/%s', $this->googleAnalyticsConfig->getPropertyId()),
             'date_ranges' => [
                 new DateRange([
-                    'start_date' => $conditions->getStartDate(),
-                    'end_date' => $conditions->getEndDate(),
+                    'start_date' => $googleAnalyticsEventConditionsTransfer->getStartDate(),
+                    'end_date' => $googleAnalyticsEventConditionsTransfer->getEndDate(),
                 ]),
             ],
             'dimensions' => $this->buildDatesDimensions(),
@@ -231,7 +231,7 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
                             'filter' => new Filter([
                                 'field_name' => static::DIMENSION_EVENT_NAME,
                                 'string_filter' => new StringFilter([
-                                    'value' => $conditions->getEventName(),
+                                    'value' => $googleAnalyticsEventConditionsTransfer->getEventName(),
                                     'match_type' => MatchType::EXACT,
                                 ]),
                             ]),
@@ -279,15 +279,7 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
      */
     protected function buildDatesDimensions(): array
     {
-        $dimensions = [new Dimension(['name' => static::DIMENSION_SEARCH_TERM])];
-
-        if ($this->googleAnalyticsConfig->getStoreDimensionName()) {
-            $dimensions[] = new Dimension(['name' => $this->googleAnalyticsConfig->getStoreDimensionName()]);
-        }
-
-        if ($this->googleAnalyticsConfig->getLocaleDimensionName()) {
-            $dimensions[] = new Dimension(['name' => $this->googleAnalyticsConfig->getLocaleDimensionName()]);
-        }
+        $dimensions = $this->buildTermsDimensions();
 
         $dimensions[] = new Dimension(['name' => static::DIMENSION_DATE]);
 
@@ -331,7 +323,7 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
                 'locale' => $localeDimension && isset($indexMap[$localeDimension])
                     ? $this->normalizeDimensionValue($dimensionValues[$indexMap[$localeDimension]]->getValue())
                     : null,
-                'count' => (int)$row->getMetricValues()[0]->getValue(),
+                'count' => (int)($row->getMetricValues()[0] ?? null)?->getValue(),
             ];
         }
 
@@ -386,6 +378,7 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
     /**
      * @param array<array{searchTerm: string, store: string|null, locale: string|null, count: int}> $terms
      * @param array<string, string> $lastOccurredMap
+     * @param int $totalCount
      */
     protected function buildCollection(
         array $terms,
@@ -395,40 +388,41 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
     ): GoogleAnalyticsEventCollectionTransfer {
         $googleAnalyticsEventCollectionTransfer = new GoogleAnalyticsEventCollectionTransfer();
 
-        foreach ($terms as $row) {
-            $lastOccurredKey = sprintf('%s|%s|%s', $row['searchTerm'], $row['store'] ?? '', $row['locale'] ?? '');
+        foreach ($terms as $term) {
+            $lastOccurredKey = sprintf('%s|%s|%s', $term['searchTerm'], $term['store'] ?? '', $term['locale'] ?? '');
 
             $googleAnalyticsEventCollectionTransfer->addEvent(
                 (new GoogleAnalyticsEventTransfer())
-                    ->setSearchTerm($row['searchTerm'])
-                    ->setStore($row['store'])
-                    ->setLocale($row['locale'])
-                    ->setCount($row['count'])
+                    ->setSearchTerm($term['searchTerm'])
+                    ->setStore($term['store'])
+                    ->setLocale($term['locale'])
+                    ->setCount($term['count'])
                     ->setLastOccurredAt($lastOccurredMap[$lastOccurredKey] ?? null),
             );
         }
 
-        $pagination = $googleAnalyticsEventCriteriaTransfer->getPagination();
-        $pagination->setNbResults($totalCount);
-        $googleAnalyticsEventCollectionTransfer->setPagination($pagination);
+        $paginationTransfer = $googleAnalyticsEventCriteriaTransfer->getPaginationOrFail();
+
+        $paginationTransfer->setNbResults($totalCount);
+        $googleAnalyticsEventCollectionTransfer->setPagination($paginationTransfer);
 
         return $googleAnalyticsEventCollectionTransfer;
     }
 
     protected function buildEmptyCollection(
-        GoogleAnalyticsEventCriteriaTransfer $criteriaTransfer,
+        GoogleAnalyticsEventCriteriaTransfer $googleAnalyticsEventCriteriaTransfer,
         int $totalCount,
     ): GoogleAnalyticsEventCollectionTransfer {
-        $pagination = $criteriaTransfer->getPagination();
-        $pagination->setNbResults($totalCount);
+        $paginationTransfer = $googleAnalyticsEventCriteriaTransfer->getPaginationOrFail();
+        $paginationTransfer->setNbResults($totalCount);
 
         return (new GoogleAnalyticsEventCollectionTransfer())
-            ->setPagination($pagination);
+            ->setPagination($paginationTransfer);
     }
 
-    protected function isDescendingSort(GoogleAnalyticsEventCriteriaTransfer $criteriaTransfer): bool
+    protected function isDescendingSort(GoogleAnalyticsEventCriteriaTransfer $googleAnalyticsEventCriteriaTransfer): bool
     {
-        $sortCollection = $criteriaTransfer->getSortCollection();
+        $sortCollection = $googleAnalyticsEventCriteriaTransfer->getSortCollection();
 
         if (!$sortCollection->count()) {
             return true;

@@ -13,6 +13,7 @@
                 <bundle>google-analytics</bundle>
                 <controller>search-terms</controller>
                 <action>index</action>
+                <visible>0</visible>
             </google-analytics-search-terms>
             <google-analytics-zero-results>
                 <label>Zero Results</label>
@@ -20,6 +21,7 @@
                 <bundle>google-analytics</bundle>
                 <controller>zero-results</controller>
                 <action>index</action>
+                <visible>0</visible>
             </google-analytics-zero-results>
         </pages>
     </google-analytics>

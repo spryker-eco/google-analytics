@@ -21,3 +21,4 @@ suites:
         modules:
             enabled:
                 - Asserts
+                - \SprykerTest\Zed\Testify\Helper\Business\BusinessHelper

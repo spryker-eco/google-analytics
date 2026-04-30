@@ -6,7 +6,7 @@ features:
       enabled: true
       order: 0
       tabs:
-          - key: storefront2
+          - key: storefront
             name: Storefront
             description: Settings for the storefront tracking snippet.
             enabled: true
@@ -40,6 +40,7 @@ features:
                             Documentation: https://support.google.com/analytics/answer/9539598
                         type: string
                         default_value: ''
+                        placeholder: 'G-xxxxxxx'
                         enabled: true
                         secret: false
                         storefront: true
@@ -47,6 +48,11 @@ features:
                         scopes:
                             - global
                             - store
+                        constraints:
+                            - type: regex
+                              message: 'Must be a valid key (starts with G- and has min 6 symbols after -).'
+                              options:
+                                  pattern: '^G-[0-9]{6,}$'
 
           - key: data_api
             name: Data API
@@ -88,3 +94,5 @@ features:
                         order: 1
                         scopes:
                             - global
+                        constraints:
+                            - type: 'SprykerEco\Zed\GoogleAnalytics\Communication\Constraint\GoogleAnalyticsCredentialsJsonFormatConstraint'

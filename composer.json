@@ -1,16 +1,21 @@
 {
     "name": "spryker-eco/google-analytics",
     "type": "library",
-    "description": "GoogleAnalytics module - GA4 storefront tracking and zero search results Back Office dashboard",
+    "description": "GoogleAnalytics module",
     "license": "proprietary",
     "require": {
         "google/analytics-data": "^0.22",
         "php": ">=8.3",
-        "spryker/gui": "*",
-        "spryker/kernel": "*",
-        "spryker/twig": "*"
+        "spryker/gui": "^5.0.0",
+        "spryker/kernel": "^3.46.0",
+        "spryker/locale": "^4.0.0",
+        "spryker/store": "^1.28.0",
+        "spryker/symfony": "^3.0.0",
+        "spryker/util-text": "^1.1.0"
     },
     "require-dev": {
+        "codeception/module-asserts": "*",
+        "phpstan/phpstan": "*",
         "spryker/code-sniffer": "*",
         "spryker/testify": "*"
     },
@@ -27,9 +32,9 @@
     "minimum-stability": "dev",
     "prefer-stable": true,
     "scripts": {
-        "cs-check": "phpcs -p -s --standard=vendor/spryker/code-sniffer/SprykerStrict/ruleset.xml src/ tests/",
-        "cs-fix": "phpcbf -p --standard=vendor/spryker/code-sniffer/SprykerStrict/ruleset.xml src/ tests/",
-        "phpstan": "vendor/bin/phpstan analyse"
+        "cs-check": "phpcs -p -s src/ tests/",
+        "cs-fix": "phpcbf -p src/ tests/",
+        "phpstan": "phpstan analyse -c phpstan.neon -l 8 src/"
     },
     "extra": {
         "branch-alias": {
