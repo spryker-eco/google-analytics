@@ -8,6 +8,7 @@
 const init = () => {
     const dateRangeSelect = document.querySelector('.js-date-range-control');
     const dateRangeInputs = document.querySelectorAll('.js-date');
+    console.log('dateRangeSelect',dateRangeSelect);
 
     if (!dateRangeSelect || dateRangeInputs.length === 0) {
         return;
@@ -25,7 +26,7 @@ const init = () => {
         });
     };
 
-    dateRangeSelect.addEventListener('change', toggleCustomDateRange);
+    $(dateRangeSelect).on('select2:select', toggleCustomDateRange);
 
     toggleCustomDateRange();
 };
