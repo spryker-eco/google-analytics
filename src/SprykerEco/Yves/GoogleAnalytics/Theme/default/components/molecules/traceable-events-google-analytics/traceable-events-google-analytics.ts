@@ -65,12 +65,14 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     }
 
     protected searchEventHandler(data: SearchEventData): void {
-        const { searchTerm, eventCategory, eventLabel = 'Search results', resultsCount = 0, eventName } = data.eventDetail;
-
+        const { searchTerm, resultsCount } = data.eventDetail;
+        const hasNoResults = resultsCount === 0 && searchTerm;
+        const eventName = hasNoResults ? 'zero_search_results' : 'search_results';
+        
         window.gtag('event', eventName, {
             search_term: searchTerm,
-            event_category: eventCategory,
-            event_label: eventLabel,
+            event_category: 'Search results',
+            event_label: hasNoResults ? 'No results' : 'Search results',
             results_count: resultsCount,
             store: this.currentStore,
             locale: this.currentLocale,
