@@ -45,6 +45,7 @@ abstract class AbstractGoogleAnalyticsFilterForm extends AbstractType
             ->add(static::FIELD_START_DATE, DateType::class, [
                 'widget' => 'single_text',
                 'required' => false,
+                'html5' => false,
                 'attr' => [
                     'class' => 'js-date js-from-date',
                 ],
@@ -52,6 +53,7 @@ abstract class AbstractGoogleAnalyticsFilterForm extends AbstractType
             ->add(static::FIELD_END_DATE, DateType::class, [
                 'widget' => 'single_text',
                 'required' => false,
+                'html5' => false,
                 'attr' => [
                     'class' => 'js-date js-to-date',
                 ],
