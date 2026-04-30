@@ -7,12 +7,12 @@
 
 declare(strict_types = 1);
 
-namespace SprykerEco\Zed\GoogleAnalytics\Communication\Builder;
+namespace SprykerEco\Zed\GoogleAnalytics\Communication\Resolver;
 
 use DateTime;
 use SprykerEco\Zed\GoogleAnalytics\Communication\Form\AbstractGoogleAnalyticsFilterForm;
 
-class EventCriteriaResolver implements EventCriteriaBuilderInterface
+class EventCriteriaResolver implements EventCriteriaResolverInterface
 {
     protected const string DATE_FORMAT = 'Y-m-d';
 

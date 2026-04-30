@@ -7,7 +7,7 @@
 
 declare(strict_types = 1);
 
-namespace SprykerEco\Zed\GoogleAnalytics\Communication\Builder;
+namespace SprykerEco\Zed\GoogleAnalytics\Communication\Resolver;
 
 interface EventCriteriaResolverInterface
 {
