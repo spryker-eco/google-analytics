@@ -1,22 +1,30 @@
 {% extends model('component') %}
 
 {% define config = {
-    name: 'google-analytics',
-    tag: 'google-analytics',
+    name: 'traceable-events-google-analytics',
+    tag: 'traceable-events-google-analytics',
 } %}
 
 {% define data = {
     gtagId: null,
 } %}
 
+{% set shouldRender = data.gtagId is defined %}
+
 {% define attributes = {
+    initial: shouldRender
+        ? {
+            appId: data.gtagId,
+            store: app.store,
+            locale: app.locale,
+        } | json_encode
+        : {},
+    'traceable-adapter': true,
     'data-gtag-script-src': "https://www.googletagmanager.com/gtag/js?id=#{data.gtagId}",
-    'data-store': app.store | default,
-    'data-locale': app.locale | default,
 } %}
 
 {% block component %}
-    {% if data.gtagId %}
+    {% if shouldRender %}
         {{ parent() }}
     {% endif %}
 {% endblock %}
@@ -27,11 +35,4 @@
             'src': attributes['data-gtag-script-src'],
         },
     } only %}
-
-    <script>
-        window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
-        gtag('js', new Date());
-        gtag('config', '{{ data.gtagId }}');
-    </script>
 {% endblock %}
