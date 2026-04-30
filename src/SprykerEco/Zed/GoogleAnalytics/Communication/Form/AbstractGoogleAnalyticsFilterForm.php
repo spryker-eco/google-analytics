@@ -1,11 +1,11 @@
 <?php
 
 /**
- * This file is part of the Spryker Suite.
- * For full license information, please view the LICENSE file that was distributed with this source code.
+ * Copyright © 2016-present Spryker Systems GmbH. All rights reserved.
+ * Use of this software requires acceptance of the Evaluation License Agreement. See LICENSE file.
  */
 
-declare(strict_types=1);
+declare(strict_types = 1);
 
 namespace SprykerEco\Zed\GoogleAnalytics\Communication\Form;
 
@@ -27,9 +27,9 @@ abstract class AbstractGoogleAnalyticsFilterForm extends AbstractType
 
     public const string FIELD_LOCALE = 'locale';
 
-    public const string OPTION_STORE_CHOICES = 'store_choices';
+    protected const string OPTION_STORE_CHOICES = 'store_choices';
 
-    public const string OPTION_LOCALE_CHOICES = 'locale_choices';
+    protected const string OPTION_LOCALE_CHOICES = 'locale_choices';
 
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
@@ -45,10 +45,16 @@ abstract class AbstractGoogleAnalyticsFilterForm extends AbstractType
             ->add(static::FIELD_START_DATE, DateType::class, [
                 'widget' => 'single_text',
                 'required' => false,
+                'attr' => [
+                    'class' => 'js-date js-from-date',
+                ],
             ])
             ->add(static::FIELD_END_DATE, DateType::class, [
                 'widget' => 'single_text',
                 'required' => false,
+                'attr' => [
+                    'class' => 'js-date js-to-date',
+                ],
             ])
             ->add(static::FIELD_STORE, ChoiceType::class, [
                 'choices' => $options[static::OPTION_STORE_CHOICES],

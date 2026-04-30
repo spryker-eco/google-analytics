@@ -1,8 +1,8 @@
 import register from 'ShopUi/app/registry';
 
-export default register('sprk-google-analytics', () =>
+export default register('google-analytics', () =>
     import(
         /* webpackMode: "lazy" */
-        /* webpackChunkName: "sprk-google-analytics" */
-        './sprk-google-analytics'
+        /* webpackChunkName: "google-analytics" */
+        './google-analytics'
     ),)

@@ -16,36 +16,14 @@
         {%- endblock %}
 
         {% block widget_content %}
-            {{ form_start(form, { 'attr': { 'class': 'form-filter' } }) }}
-                <div class="row">
-                    <div class="col-sm-2">
-                        {{ form_row(form.store, { label: 'Store' }) }}
-                    </div>
-                    <div class="col-sm-2">
-                        {{ form_row(form.locale, { label: 'Locale' }) }}
-                    </div>
-                    <div class="col-sm-3">
-                        {{ form_row(form.dateRangePreset, {
-                            attr: { class: 'js-form-submitter' }
-                        }) }}
-                    </div>
-                    <div class="col-sm-2">
-                        {{ form_row(form.startDate, { label: 'From' }) }}
-                    </div>
-                    <div class="col-sm-2">
-                        {{ form_row(form.endDate, { label: 'To' }) }}
-                    </div>
-                    <div class="col-sm-2">
-                        {{ form_row(form.minimumCount, { label: 'Min. occurrences' }) }}
-                    </div>
-                    <div class="col-sm-1 align-self-end">
-                        <button type="submit" class="btn btn-primary btn-sm mb-3">{{ 'Apply' | trans }}</button>
-                    </div>
-                </div>
-            {{ form_end(form) }}
+            {% include '@GoogleAnalytics/_partials/_form.twig' with { form: form } only %}
 
             {{ table | raw }}
-            <p class="text-muted small mt-2">{{ 'Data may be delayed up to 48 hours due to GA4 processing.' | trans }}</p>
         {% endblock %}
     {% endembed %}
+{% endblock %}
+
+{% block footer_js %}
+    {{ parent() }}
+    <script src="{{ assetsPath('js/google-analytics.js') }}"></script>
 {% endblock %}
