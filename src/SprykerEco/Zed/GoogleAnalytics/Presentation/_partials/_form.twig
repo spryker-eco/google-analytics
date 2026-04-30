@@ -2,17 +2,17 @@
     <div class="row">
         <div class="col col-md-6 mb-2">
             {{ form_label(form.store) }}
-            {{ form_widget(form.store) }}
+            {{ form_widget(form.store, {'attr': {'class': 'spryker-form-select2combobox'}}) }}
         </div>
         <div class="col col-md-6 mb-2">
             {{ form_label(form.locale) }}
-            {{ form_widget(form.locale) }}
+            {{ form_widget(form.locale, {'attr': {'class': 'spryker-form-select2combobox'}}) }}
         </div>
     </div>
     <div class="row">
         <div class="col-12 col-md-4 mb-2">
             {{ form_label(form.dateRangePreset) }}
-            {{ form_widget(form.dateRangePreset, {'attr': {'class': 'js-date-range-control'}}) }}
+            {{ form_widget(form.dateRangePreset, {'attr': {'class': 'js-date-range-control spryker-form-select2combobox'}}) }}
         </div>
         <div class="col-6 col-md-4 mb-2 js-date-range-custom">
             {{ form_label(form.startDate) }}
