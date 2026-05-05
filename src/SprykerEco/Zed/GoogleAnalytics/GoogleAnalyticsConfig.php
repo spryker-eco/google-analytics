@@ -9,6 +9,7 @@ declare(strict_types = 1);
 
 namespace SprykerEco\Zed\GoogleAnalytics;
 
+use RuntimeException;
 use Spryker\Zed\Kernel\AbstractBundleConfig;
 
 class GoogleAnalyticsConfig extends AbstractBundleConfig

@@ -21,18 +21,6 @@ features:
                       - global
                       - store
                   settings:
-                      - key: enabled
-                        name: Enabled
-                        description: Enable or disable GA4 tracking for the storefront.
-                        type: boolean
-                        default_value: false
-                        enabled: true
-                        secret: false
-                        storefront: true
-                        order: 0
-                        scopes:
-                            - global
-                            - store
                       - key: measurement_id
                         name: Measurement ID
                         description: >
@@ -52,7 +40,7 @@ features:
                             - type: regex
                               message: 'Must be a valid key (starts with G- and has min 6 symbols after -).'
                               options:
-                                  pattern: '^G-[0-9]{6,}$'
+                                  pattern: '^G-[A-Za-z0-9]{6,}$'
 
           - key: data_api
             name: Data API
