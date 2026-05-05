@@ -20,5 +20,4 @@ suites:
         actor: GoogleAnalyticsBusinessTester
         modules:
             enabled:
-                - Asserts
                 - \SprykerTest\Zed\Testify\Helper\Business\BusinessHelper
