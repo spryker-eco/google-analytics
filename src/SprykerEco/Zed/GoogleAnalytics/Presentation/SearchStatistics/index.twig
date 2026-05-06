@@ -1,0 +1,96 @@
+{% extends '@Gui/Layout/layout.twig' %}
+
+{% block section_title %}
+    {{ 'Search Statistics' | trans }}
+{% endblock %}
+
+{% block content %}
+    {% embed '@Gui/Partials/widget.twig' %}
+        {% block widget_title -%}
+            <h5>{{ 'Search Statistics' | trans }}</h5>
+        {%- endblock %}
+
+        {% block widget_content %}
+            {% include '@GoogleAnalytics/_partials/_form.twig' with { form: form } only %}
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title">
+                                {{ 'Top Search Terms' | trans }}
+                            </h5>
+                            <div class="card-action">
+                                <a href="{{ searchTermsViewAllUrl }}">{{ 'View all' | trans }}</a>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-striped table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>{{ 'Search Term' | trans }}</th>
+                                        <th>{{ 'Count' | trans }}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for event in searchCollection.events %}
+                                        <tr>
+                                            <td>{{ event.searchTerm | e }}</td>
+                                            <td>{{ event.count }}</td>
+                                        </tr>
+                                    {% else %}
+                                        <tr>
+                                            <td colspan="2">{{ 'No data available.' | trans }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title">
+                                <h5>
+                                    {{ 'Top Zero-Result Searches' | trans }}
+                                </h5>
+                            </div>
+                            <div class="card-action">
+                                <a href="{{ zeroResultsViewAllUrl }}">{{ 'View all' | trans }}</a>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-striped table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>{{ 'Search Term' | trans }}</th>
+                                        <th>{{ 'Count' | trans }}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for event in zeroResultsCollection.events %}
+                                        <tr>
+                                            <td>{{ event.searchTerm | e }}</td>
+                                            <td>{{ event.count }}</td>
+                                        </tr>
+                                    {% else %}
+                                        <tr>
+                                            <td colspan="2">{{ 'No data available.' | trans }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% endblock %}
+    {% endembed %}
+{% endblock %}
+
+{% block footer_js %}
+    {{ parent() }}
+    <script src="{{ assetsPath('js/google-analytics.js') }}"></script>
+{% endblock %}

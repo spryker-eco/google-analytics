@@ -1,0 +1,38 @@
+{% extends model('component') %}
+
+{% define config = {
+    name: 'traceable-events-google-analytics',
+    tag: 'traceable-events-google-analytics',
+} %}
+
+{% define data = {
+    gtagId: null,
+} %}
+
+{% set shouldRender = data.gtagId is defined %}
+
+{% define attributes = {
+    initial: shouldRender
+        ? {
+            appId: data.gtagId,
+            store: app.store,
+            locale: app.locale,
+        } | json_encode
+        : {},
+    'traceable-adapter': true,
+    'data-gtag-script-src': "https://www.googletagmanager.com/gtag/js?id=#{data.gtagId}",
+} %}
+
+{% block component %}
+    {% if shouldRender %}
+        {{ parent() }}
+    {% endif %}
+{% endblock %}
+
+{% block body %}
+    {% include molecule('script-loader') with {
+        attributes: {
+            'src': attributes['data-gtag-script-src'],
+        },
+    } only %}
+{% endblock %}

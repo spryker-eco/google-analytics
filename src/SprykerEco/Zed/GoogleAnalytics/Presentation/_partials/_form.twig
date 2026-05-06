@@ -1,0 +1,37 @@
+{{ form_start(form, {'method': 'GET', 'attr': {'class': 'js-form form-filter'}}) }}
+    <div class="row">
+        <div class="col col-md-6 mb-2">
+            {{ form_label(form.store) }}
+            {{ form_widget(form.store, {'attr': {'class': 'spryker-form-select2combobox'}}) }}
+        </div>
+        <div class="col col-md-6 mb-2">
+            {{ form_label(form.locale) }}
+            {{ form_widget(form.locale, {'attr': {'class': 'spryker-form-select2combobox'}}) }}
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-12 col-md-4 mb-2">
+            {{ form_label(form.dateRangePreset) }}
+            {{ form_widget(form.dateRangePreset, {'attr': {'class': 'js-date-range-control spryker-form-select2combobox'}}) }}
+        </div>
+        <div class="col-6 col-md-4 mb-2 js-date-range-custom">
+            {{ form_label(form.startDate) }}
+            {{ form_widget(form.startDate) }}
+        </div>
+        <div class="col-6 col-md-4 mb-2 js-date-range-custom">
+            {{ form_label(form.endDate) }}
+            {{ form_widget(form.endDate) }}
+        </div>
+    </div>
+    <div class="row">
+        {{ form_rest(form) }}
+    </div>
+    <div class="row justify-content-between">
+        <div class="col">
+            <button type="submit" class="btn btn-primary">{{ 'Apply' | trans }}</button>
+        </div>
+        <div class="col-auto">
+            <p class="text-muted mt-2">{{ 'Data may be delayed up to 48 hours due to GA4 processing.' | trans }}</p>
+        </div>
+    </div>
+{{ form_end(form) }}
