@@ -32,6 +32,7 @@
 {% block body %}
     {% include molecule('script-loader') with {
         attributes: {
+            'async': true,
             'src': attributes['data-gtag-script-src'],
         },
     } only %}

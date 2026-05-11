@@ -49,8 +49,9 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         this.currentLocale = locale;
 
         window.dataLayer = window.dataLayer || [];
-        window.gtag = (...args: unknown[]): void => {
-            window.dataLayer.push(args);
+        window.gtag = function gtag(): void {
+            // eslint-disable-next-line prefer-rest-params
+            window.dataLayer.push(arguments);
         };
         window.gtag('js', new Date());
         window.gtag('config', appId);
