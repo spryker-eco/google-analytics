@@ -10,6 +10,7 @@ declare(strict_types = 1);
 namespace SprykerEco\Zed\GoogleAnalytics\Business\Reader;
 
 use DateTime;
+use Generated\Shared\Transfer\ErrorTransfer;
 use Generated\Shared\Transfer\GoogleAnalyticsEventCollectionTransfer;
 use Generated\Shared\Transfer\GoogleAnalyticsEventConditionsTransfer;
 use Generated\Shared\Transfer\GoogleAnalyticsEventCriteriaTransfer;
@@ -31,7 +32,10 @@ use Google\Analytics\Data\V1beta\OrderBy\DimensionOrderBy;
 use Google\Analytics\Data\V1beta\OrderBy\MetricOrderBy;
 use Google\Analytics\Data\V1beta\RunReportRequest;
 use Google\Analytics\Data\V1beta\RunReportResponse;
+use Google\ApiCore\ApiException;
+use Google\ApiCore\ValidationException;
 use Spryker\Shared\Log\LoggerTrait;
+use SprykerEco\Shared\GoogleAnalytics\Exception\GoogleAnalyticsInvalidConfigException;
 use SprykerEco\Zed\GoogleAnalytics\Business\Client\GoogleAnalyticsDataClientInterface;
 use SprykerEco\Zed\GoogleAnalytics\GoogleAnalyticsConfig;
 use Throwable;
@@ -72,17 +76,13 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
         try {
             // Call 1: fetch paginated search terms with event counts
             $termsResponse = $this->runTermsReport($googleAnalyticsEventCriteriaTransfer);
-        } catch (Throwable $e) {
+        } catch (GoogleAnalyticsInvalidConfigException | ApiException | ValidationException $e) {
+            $this->getLogger()->error('Google Analytics configuration is invalid', ['exception' => $e]);
+
             $googleAnalyticsEventCollectionTransfer = $this->buildEmptyCollection($googleAnalyticsEventCriteriaTransfer);
-            $googleAnalyticsEventCollectionTransfer->addError(new ErrorTransfer([
-                'message' => 'API error',
-            ]));
 
-            $this->getLogger()->error('API error', ['exception' => $e]);
-
-            return $googleAnalyticsEventCollectionTransfer;
-
-        } 
+            return $googleAnalyticsEventCollectionTransfer->addError((new ErrorTransfer())->setMessage($e->getMessage()));
+        }
 
         if ($termsResponse->getRows()->count() === 0) {
             return $this->buildEmptyCollection($googleAnalyticsEventCriteriaTransfer);
@@ -118,26 +118,22 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
     }
 
     /**
-     * @param array<array{searchTerm: string, store: string|null, locale: string|null, count: int}> $terms
+     * @param \Generated\Shared\Transfer\GoogleAnalyticsEventCollectionTransfer $googleAnalyticsEventCollectionTransfer
      * @param array<string, string> $lastOccurredMap
      */
     protected function setLastOccured(
         GoogleAnalyticsEventCollectionTransfer $googleAnalyticsEventCollectionTransfer,
         array $lastOccurredMap,
     ): GoogleAnalyticsEventCollectionTransfer {
-
         foreach ($googleAnalyticsEventCollectionTransfer->getEvents() as $googleAnalyticsEventTransfer) {
-            $lastOccurredKey = sprintf('%s|%s|%s', $googleAnalyticsEventTransfer->getSearchTermOrFail(), $googleAnalyticsEventTransfer->getStore(), $googleAnalyticsEventTransfer->getLocale()); 
+            $lastOccurredKey = sprintf('%s|%s|%s', $googleAnalyticsEventTransfer->getSearchTermOrFail(), $googleAnalyticsEventTransfer->getStore(), $googleAnalyticsEventTransfer->getLocale());
 
             $googleAnalyticsEventTransfer
                     ->setLastOccurredAt($lastOccurredMap[$lastOccurredKey] ?? null);
         }
 
-
         return $googleAnalyticsEventCollectionTransfer;
     }
-
-
 
     protected function runTermsReport(
         GoogleAnalyticsEventCriteriaTransfer $googleAnalyticsEventCriteriaTransfer,
@@ -249,10 +245,10 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
     }
 
      /**
-     * @param array<string> $terms
-     *
-     * @return array<string, string>
-     */
+      * @param array<string> $terms
+      *
+      * @return array<string, string>
+      */
     protected function runDatesReport(
         GoogleAnalyticsEventCriteriaTransfer $googleAnalyticsEventCriteriaTransfer,
         GoogleAnalyticsEventCollectionTransfer $googleAnalyticsEventCollectionTransfer,
@@ -286,9 +282,10 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
                         new FilterExpression([
                             'filter' => new Filter([
                                 'field_name' => static::DIMENSION_SEARCH_TERM,
-                                'in_list_filter' => new InListFilter(['values' => array_map(function (GoogleAnalyticsEventTransfer $googleAnalyticsEventTransfer) {
+                                'in_list_filter' => new InListFilter([
+                                    'values' => array_map(function (GoogleAnalyticsEventTransfer $googleAnalyticsEventTransfer) {
                                     return $googleAnalyticsEventTransfer->getSearchTermOrFail();
-                                }, $googleAnalyticsEventCollectionTransfer->getEvents())]),
+                }, $googleAnalyticsEventCollectionTransfer->getEvents())]),
                             ]),
                         ]),
                     ],
@@ -306,8 +303,8 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
     }
 
         /**
-     * @return array<\Google\Analytics\Data\V1beta\Dimension>
-     */
+         * @return array<\Google\Analytics\Data\V1beta\Dimension>
+         */
     protected function buildTermsDimensions(): array
     {
         $dimensions = [new Dimension(['name' => static::DIMENSION_SEARCH_TERM])];
@@ -323,10 +320,9 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
         return $dimensions;
     }
 
-
        /**
-     * @return array<\Google\Analytics\Data\V1beta\Dimension>
-     */
+        * @return array<\Google\Analytics\Data\V1beta\Dimension>
+        */
     protected function buildDatesDimensions(): array
     {
         $dimensions = $this->buildTermsDimensions();
@@ -403,7 +399,6 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
     ): GoogleAnalyticsEventCollectionTransfer {
         $googleAnalyticsEventCollectionTransfer = new GoogleAnalyticsEventCollectionTransfer();
 
-
         $indexMap = $this->buildDimensionIndexMap($response);
         $storeDimension = $this->googleAnalyticsConfig->getStoreDimensionName();
         $localeDimension = $this->googleAnalyticsConfig->getLocaleDimensionName();
@@ -422,9 +417,8 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
                     ->setLocale($localeDimension && isset($indexMap[$localeDimension])
                     ? $this->normalizeDimensionValue($dimensionValues[$indexMap[$localeDimension]]->getValue())
                     : null)
-                    ->setCount((int)($row->getMetricValues()[0] ?? null)?->getValue())
+                    ->setCount((int)($row->getMetricValues()[0] ?? null)?->getValue()),
             );
-    
         }
 
         $paginationTransfer = $googleAnalyticsEventCriteriaTransfer->getPaginationOrFail();

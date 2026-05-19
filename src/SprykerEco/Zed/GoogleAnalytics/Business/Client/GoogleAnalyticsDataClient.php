@@ -12,15 +12,25 @@ namespace SprykerEco\Zed\GoogleAnalytics\Business\Client;
 use Google\Analytics\Data\V1beta\Client\BetaAnalyticsDataClient;
 use Google\Analytics\Data\V1beta\RunReportRequest;
 use Google\Analytics\Data\V1beta\RunReportResponse;
+use SprykerEco\Zed\GoogleAnalytics\GoogleAnalyticsConfig;
 
 class GoogleAnalyticsDataClient implements GoogleAnalyticsDataClientInterface
 {
-    public function __construct(protected BetaAnalyticsDataClient $client)
+    protected static ?BetaAnalyticsDataClient $client = null;
+
+    public function __construct(protected GoogleAnalyticsConfig $googleAnalyticsConfig)
     {
     }
 
     public function runReport(RunReportRequest $request): RunReportResponse
     {
-        return $this->client->runReport($request);
+        if (!static::$client) {
+            static::$client = new BetaAnalyticsDataClient([
+                'credentials' => $this->googleAnalyticsConfig->getServiceAccountCredentialsJson(),
+                'transport' => 'rest',
+            ]);
+        }
+
+        return static::$client->runReport($request);
     }
 }

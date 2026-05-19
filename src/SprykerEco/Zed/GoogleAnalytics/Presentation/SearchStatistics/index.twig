@@ -39,9 +39,17 @@
                                             <td>{{ event.count }}</td>
                                         </tr>
                                     {% else %}
+                                        {% if searchCollection.errors %}
+                                            {% for error in searchCollection.errors %}
+                                                <tr>
+                                                    <td colspan="2">{{ error.message }}</td>
+                                                </tr>
+                                            {% endfor %}
+                                        {% else %}
                                         <tr>
                                             <td colspan="2">{{ 'No data available.' | trans }}</td>
                                         </tr>
+                                        {% endif %}
                                     {% endfor %}
                                 </tbody>
                             </table>
@@ -76,9 +84,17 @@
                                             <td>{{ event.count }}</td>
                                         </tr>
                                     {% else %}
+                                        {% if zeroResultsCollection.errors %}
+                                            {% for error in zeroResultsCollection.errors %}
+                                                <tr>
+                                                    <td colspan="2">{{ error.message }}</td>
+                                                </tr>
+                                            {% endfor %}
+                                        {% else %}
                                         <tr>
                                             <td colspan="2">{{ 'No data available.' | trans }}</td>
                                         </tr>
+                                        {% endif %}
                                     {% endfor %}
                                 </tbody>
                             </table>

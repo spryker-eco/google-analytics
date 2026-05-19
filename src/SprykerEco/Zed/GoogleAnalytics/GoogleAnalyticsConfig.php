@@ -9,8 +9,8 @@ declare(strict_types = 1);
 
 namespace SprykerEco\Zed\GoogleAnalytics;
 
-use RuntimeException;
 use Spryker\Zed\Kernel\AbstractBundleConfig;
+use SprykerEco\Shared\GoogleAnalytics\Exception\GoogleAnalyticsInvalidConfigException;
 
 class GoogleAnalyticsConfig extends AbstractBundleConfig
 {
@@ -67,7 +67,7 @@ class GoogleAnalyticsConfig extends AbstractBundleConfig
         ), true);
 
         if (!$serviceAccountCredentials) {
-            throw new RuntimeException('Google Analytics credentials are not configured.');
+            throw new GoogleAnalyticsInvalidConfigException(static::CONFIGURATION_KEY_GOOGLE_ANALYTICS_DATA_API_CONNECTION_SERVICE_ACCOUNT_CREDENTIALS_JSON);
         }
 
         return $serviceAccountCredentials;
