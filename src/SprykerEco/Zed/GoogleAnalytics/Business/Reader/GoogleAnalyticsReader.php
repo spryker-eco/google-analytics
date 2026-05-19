@@ -282,7 +282,7 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
                                 'in_list_filter' => new InListFilter([
                                     'values' => array_map(function (GoogleAnalyticsEventTransfer $googleAnalyticsEventTransfer) {
                                     return $googleAnalyticsEventTransfer->getSearchTermOrFail();
-                }, $googleAnalyticsEventCollectionTransfer->getEvents())]),
+                }, $googleAnalyticsEventCollectionTransfer->getEvents()->getArrayCopy())]),
                             ]),
                         ]),
                     ],
@@ -432,7 +432,7 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
         $paginationTransfer = $googleAnalyticsEventCriteriaTransfer->getPaginationOrFail();
 
         return (new GoogleAnalyticsEventCollectionTransfer())
-            ->setPagination($paginationTransfer);
+            ->setPagination($paginationTransfer->setNbResults(0));
     }
 
     protected function isDescendingSort(GoogleAnalyticsEventCriteriaTransfer $googleAnalyticsEventCriteriaTransfer): bool
