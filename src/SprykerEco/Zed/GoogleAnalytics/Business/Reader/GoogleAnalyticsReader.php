@@ -38,7 +38,6 @@ use Spryker\Shared\Log\LoggerTrait;
 use SprykerEco\Shared\GoogleAnalytics\Exception\GoogleAnalyticsInvalidConfigException;
 use SprykerEco\Zed\GoogleAnalytics\Business\Client\GoogleAnalyticsDataClientInterface;
 use SprykerEco\Zed\GoogleAnalytics\GoogleAnalyticsConfig;
-use Throwable;
 
 class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
 {
@@ -281,8 +280,8 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
                                 'field_name' => static::DIMENSION_SEARCH_TERM,
                                 'in_list_filter' => new InListFilter([
                                     'values' => array_map(function (GoogleAnalyticsEventTransfer $googleAnalyticsEventTransfer) {
-                                    return $googleAnalyticsEventTransfer->getSearchTermOrFail();
-                }, $googleAnalyticsEventCollectionTransfer->getEvents()->getArrayCopy())]),
+                                        return $googleAnalyticsEventTransfer->getSearchTermOrFail();
+                                    }, $googleAnalyticsEventCollectionTransfer->getEvents()->getArrayCopy())]),
                             ]),
                         ]),
                     ],
