@@ -77,7 +77,7 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
             // Call 1: fetch paginated search terms with event counts
             $termsResponse = $this->runTermsReport($googleAnalyticsEventCriteriaTransfer);
         } catch (GoogleAnalyticsInvalidConfigException | ApiException | ValidationException $e) {
-            $this->getLogger()->error('Google Analytics configuration is invalid', ['exception' => $e]);
+            $this->getLogger()->error('Search statistics report failed', ['exception' => $e]);
 
             $googleAnalyticsEventCollectionTransfer = $this->buildEmptyCollection($googleAnalyticsEventCriteriaTransfer);
 
@@ -103,15 +103,12 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
                 $googleAnalyticsEventCriteriaTransfer,
                 $googleAnalyticsEventCollectionTransfer,
             );
-        } catch (Throwable $e) {
+        } catch (GoogleAnalyticsInvalidConfigException | ApiException | ValidationException $e) {
+            $this->getLogger()->error('Search statistics report failed', ['exception' => $e]);
+
             $googleAnalyticsEventCollectionTransfer = $this->buildEmptyCollection($googleAnalyticsEventCriteriaTransfer);
-            $googleAnalyticsEventCollectionTransfer->addError(new ErrorTransfer([
-                'message' => 'API error',
-            ]));
 
-            $this->getLogger()->error('API error', ['exception' => $e]);
-
-            return $googleAnalyticsEventCollectionTransfer;
+            return $googleAnalyticsEventCollectionTransfer->addError((new ErrorTransfer())->setMessage($e->getMessage()));
         }
 
         return $this->setLastOccured($googleAnalyticsEventCollectionTransfer, $lastOccurredMap);
