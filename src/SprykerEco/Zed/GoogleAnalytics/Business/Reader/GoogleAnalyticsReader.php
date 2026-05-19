@@ -31,11 +31,15 @@ use Google\Analytics\Data\V1beta\OrderBy\DimensionOrderBy;
 use Google\Analytics\Data\V1beta\OrderBy\MetricOrderBy;
 use Google\Analytics\Data\V1beta\RunReportRequest;
 use Google\Analytics\Data\V1beta\RunReportResponse;
+use Spryker\Shared\Log\LoggerTrait;
 use SprykerEco\Zed\GoogleAnalytics\Business\Client\GoogleAnalyticsDataClientInterface;
 use SprykerEco\Zed\GoogleAnalytics\GoogleAnalyticsConfig;
+use Throwable;
 
 class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
 {
+    use LoggerTrait;
+
     protected const string DATE_FORMAT = 'Y-m-d';
 
     protected const string DATE_FORMAT_GA4 = 'Ymd';
@@ -49,7 +53,6 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
     // These are the expected GA4 dimension names once registered in the property.
     // The actual names used come from GoogleAnalyticsConfig::getStoreDimensionName() / getLocaleDimensionName().
     // A null return from config means the dimension is not registered — it is excluded from all requests.
-
     protected const string METRIC_EVENT_COUNT = 'eventCount';
 
     // GA4 returns this sentinel when a custom dimension was not set on the event
@@ -66,31 +69,75 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
     ): GoogleAnalyticsEventCollectionTransfer {
         $this->resolveConditions($googleAnalyticsEventCriteriaTransfer->getConditionsOrFail());
 
-        // Call 1: fetch paginated search terms with event counts
-        $termsResponse = $this->runTermsReport($googleAnalyticsEventCriteriaTransfer);
-        $totalCount = $termsResponse->getRowCount();
+        try {
+            // Call 1: fetch paginated search terms with event counts
+            $termsResponse = $this->runTermsReport($googleAnalyticsEventCriteriaTransfer);
+        } catch (Throwable $e) {
+            $googleAnalyticsEventCollectionTransfer = $this->buildEmptyCollection($googleAnalyticsEventCriteriaTransfer);
+            $googleAnalyticsEventCollectionTransfer->addError(new ErrorTransfer([
+                'message' => 'API error',
+            ]));
+
+            $this->getLogger()->error('API error', ['exception' => $e]);
+
+            return $googleAnalyticsEventCollectionTransfer;
+
+        } 
 
         if ($termsResponse->getRows()->count() === 0) {
-            return $this->buildEmptyCollection($googleAnalyticsEventCriteriaTransfer, $totalCount);
+            return $this->buildEmptyCollection($googleAnalyticsEventCriteriaTransfer);
         }
 
-        $terms = $this->extractTermRows($termsResponse);
+        $googleAnalyticsEventCollectionTransfer = $this->buildCollection($termsResponse, $googleAnalyticsEventCriteriaTransfer);
+
+        if (!$googleAnalyticsEventCriteriaTransfer->getConditions()?->getWithLastOccurred()) {
+            return $googleAnalyticsEventCollectionTransfer;
+        }
 
         // Call 2: fetch last occurred dates for the current page terms only.
         // A single report combining searchTerm+date dimensions cannot be paginated
         // by unique term — GA4 returns one row per (term, date) pair, so limit=50
         // gives 50 pairs, not 50 unique terms.
-
-        $lastOccurredMap = [];
-        if ($googleAnalyticsEventCriteriaTransfer->getConditions()?->getWithLastOccurred()) {
+        try {
             $lastOccurredMap = $this->runDatesReport(
                 $googleAnalyticsEventCriteriaTransfer,
-                array_column($terms, 'searchTerm'),
+                $googleAnalyticsEventCollectionTransfer,
             );
+        } catch (Throwable $e) {
+            $googleAnalyticsEventCollectionTransfer = $this->buildEmptyCollection($googleAnalyticsEventCriteriaTransfer);
+            $googleAnalyticsEventCollectionTransfer->addError(new ErrorTransfer([
+                'message' => 'API error',
+            ]));
+
+            $this->getLogger()->error('API error', ['exception' => $e]);
+
+            return $googleAnalyticsEventCollectionTransfer;
         }
 
-        return $this->buildCollection($terms, $lastOccurredMap, $googleAnalyticsEventCriteriaTransfer, $totalCount);
+        return $this->setLastOccured($googleAnalyticsEventCollectionTransfer, $lastOccurredMap);
     }
+
+    /**
+     * @param array<array{searchTerm: string, store: string|null, locale: string|null, count: int}> $terms
+     * @param array<string, string> $lastOccurredMap
+     */
+    protected function setLastOccured(
+        GoogleAnalyticsEventCollectionTransfer $googleAnalyticsEventCollectionTransfer,
+        array $lastOccurredMap,
+    ): GoogleAnalyticsEventCollectionTransfer {
+
+        foreach ($googleAnalyticsEventCollectionTransfer->getEvents() as $googleAnalyticsEventTransfer) {
+            $lastOccurredKey = sprintf('%s|%s|%s', $googleAnalyticsEventTransfer->getSearchTermOrFail(), $googleAnalyticsEventTransfer->getStore(), $googleAnalyticsEventTransfer->getLocale()); 
+
+            $googleAnalyticsEventTransfer
+                    ->setLastOccurredAt($lastOccurredMap[$lastOccurredKey] ?? null);
+        }
+
+
+        return $googleAnalyticsEventCollectionTransfer;
+    }
+
+
 
     protected function runTermsReport(
         GoogleAnalyticsEventCriteriaTransfer $googleAnalyticsEventCriteriaTransfer,
@@ -201,14 +248,14 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
         ]);
     }
 
-    /**
+     /**
      * @param array<string> $terms
      *
      * @return array<string, string>
      */
     protected function runDatesReport(
         GoogleAnalyticsEventCriteriaTransfer $googleAnalyticsEventCriteriaTransfer,
-        array $terms,
+        GoogleAnalyticsEventCollectionTransfer $googleAnalyticsEventCollectionTransfer,
     ): array {
         $googleAnalyticsEventConditionsTransfer = $googleAnalyticsEventCriteriaTransfer->getConditionsOrFail();
 
@@ -239,7 +286,9 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
                         new FilterExpression([
                             'filter' => new Filter([
                                 'field_name' => static::DIMENSION_SEARCH_TERM,
-                                'in_list_filter' => new InListFilter(['values' => $terms]),
+                                'in_list_filter' => new InListFilter(['values' => array_map(function (GoogleAnalyticsEventTransfer $googleAnalyticsEventTransfer) {
+                                    return $googleAnalyticsEventTransfer->getSearchTermOrFail();
+                                }, $googleAnalyticsEventCollectionTransfer->getEvents())]),
                             ]),
                         ]),
                     ],
@@ -256,7 +305,7 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
         return $this->buildLastOccurredMap($this->client->runReport($request));
     }
 
-    /**
+        /**
      * @return array<\Google\Analytics\Data\V1beta\Dimension>
      */
     protected function buildTermsDimensions(): array
@@ -274,7 +323,8 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
         return $dimensions;
     }
 
-    /**
+
+       /**
      * @return array<\Google\Analytics\Data\V1beta\Dimension>
      */
     protected function buildDatesDimensions(): array
@@ -300,34 +350,6 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
         }
 
         return $map;
-    }
-
-    /**
-     * @return array<array{searchTerm: string, store: string|null, locale: string|null, count: int}>
-     */
-    protected function extractTermRows(RunReportResponse $response): array
-    {
-        $indexMap = $this->buildDimensionIndexMap($response);
-        $storeDimension = $this->googleAnalyticsConfig->getStoreDimensionName();
-        $localeDimension = $this->googleAnalyticsConfig->getLocaleDimensionName();
-
-        $terms = [];
-
-        foreach ($response->getRows() as $row) {
-            $dimensionValues = $row->getDimensionValues();
-            $terms[] = [
-                'searchTerm' => $dimensionValues[$indexMap[static::DIMENSION_SEARCH_TERM]]->getValue(),
-                'store' => $storeDimension && isset($indexMap[$storeDimension])
-                    ? $this->normalizeDimensionValue($dimensionValues[$indexMap[$storeDimension]]->getValue())
-                    : null,
-                'locale' => $localeDimension && isset($indexMap[$localeDimension])
-                    ? $this->normalizeDimensionValue($dimensionValues[$indexMap[$localeDimension]]->getValue())
-                    : null,
-                'count' => (int)($row->getMetricValues()[0] ?? null)?->getValue(),
-            ];
-        }
-
-        return $terms;
     }
 
     protected function normalizeDimensionValue(string $value): ?string
@@ -375,35 +397,39 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
         return $map;
     }
 
-    /**
-     * @param array<array{searchTerm: string, store: string|null, locale: string|null, count: int}> $terms
-     * @param array<string, string> $lastOccurredMap
-     * @param int $totalCount
-     */
     protected function buildCollection(
-        array $terms,
-        array $lastOccurredMap,
+        RunReportResponse $response,
         GoogleAnalyticsEventCriteriaTransfer $googleAnalyticsEventCriteriaTransfer,
-        int $totalCount,
     ): GoogleAnalyticsEventCollectionTransfer {
         $googleAnalyticsEventCollectionTransfer = new GoogleAnalyticsEventCollectionTransfer();
 
-        foreach ($terms as $term) {
-            $lastOccurredKey = sprintf('%s|%s|%s', $term['searchTerm'], $term['store'] ?? '', $term['locale'] ?? '');
+
+        $indexMap = $this->buildDimensionIndexMap($response);
+        $storeDimension = $this->googleAnalyticsConfig->getStoreDimensionName();
+        $localeDimension = $this->googleAnalyticsConfig->getLocaleDimensionName();
+
+        $terms = [];
+
+        foreach ($response->getRows() as $row) {
+            $dimensionValues = $row->getDimensionValues();
 
             $googleAnalyticsEventCollectionTransfer->addEvent(
                 (new GoogleAnalyticsEventTransfer())
-                    ->setSearchTerm($term['searchTerm'])
-                    ->setStore($term['store'])
-                    ->setLocale($term['locale'])
-                    ->setCount($term['count'])
-                    ->setLastOccurredAt($lastOccurredMap[$lastOccurredKey] ?? null),
+                    ->setSearchTerm($dimensionValues[$indexMap[static::DIMENSION_SEARCH_TERM]]->getValue())
+                    ->setStore($storeDimension && isset($indexMap[$storeDimension])
+                    ? $this->normalizeDimensionValue($dimensionValues[$indexMap[$storeDimension]]->getValue())
+                    : null)
+                    ->setLocale($localeDimension && isset($indexMap[$localeDimension])
+                    ? $this->normalizeDimensionValue($dimensionValues[$indexMap[$localeDimension]]->getValue())
+                    : null)
+                    ->setCount((int)($row->getMetricValues()[0] ?? null)?->getValue())
             );
+    
         }
 
         $paginationTransfer = $googleAnalyticsEventCriteriaTransfer->getPaginationOrFail();
 
-        $paginationTransfer->setNbResults($totalCount);
+        $paginationTransfer->setNbResults($response->getRowCount());
         $googleAnalyticsEventCollectionTransfer->setPagination($paginationTransfer);
 
         return $googleAnalyticsEventCollectionTransfer;
@@ -411,10 +437,8 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
 
     protected function buildEmptyCollection(
         GoogleAnalyticsEventCriteriaTransfer $googleAnalyticsEventCriteriaTransfer,
-        int $totalCount,
     ): GoogleAnalyticsEventCollectionTransfer {
         $paginationTransfer = $googleAnalyticsEventCriteriaTransfer->getPaginationOrFail();
-        $paginationTransfer->setNbResults($totalCount);
 
         return (new GoogleAnalyticsEventCollectionTransfer())
             ->setPagination($paginationTransfer);

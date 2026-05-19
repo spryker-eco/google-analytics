@@ -15,10 +15,10 @@ use Spryker\Zed\Kernel\AbstractBundleConfig;
 class GoogleAnalyticsConfig extends AbstractBundleConfig
 {
     protected const string CONFIGURATION_KEY_GOOGLE_ANALYTICS_DATA_API_CONNECTION_PROPERTY_ID
-        = 'google_analytics:data_api:connection:property_id';
+        = 'integrations:google_analytics:connection:property_id';
 
     protected const string CONFIGURATION_KEY_GOOGLE_ANALYTICS_DATA_API_CONNECTION_SERVICE_ACCOUNT_CREDENTIALS_JSON
-        = 'google_analytics:data_api:connection:service_account_credentials_json';
+        = 'integrations:google_analytics:connection:service_account_credentials_json';
 
     protected const array DATE_RANGE_PRESETS = [
         '-1 day' => 'Last 24 hours',
