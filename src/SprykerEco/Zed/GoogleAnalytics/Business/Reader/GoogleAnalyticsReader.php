@@ -298,9 +298,9 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
         return $this->buildLastOccurredMap($this->client->runReport($request));
     }
 
-        /**
-         * @return array<\Google\Analytics\Data\V1beta\Dimension>
-         */
+    /**
+     * @return array<\Google\Analytics\Data\V1beta\Dimension>
+     */
     protected function buildTermsDimensions(): array
     {
         $dimensions = [new Dimension(['name' => static::DIMENSION_SEARCH_TERM])];
@@ -316,9 +316,9 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
         return $dimensions;
     }
 
-       /**
-        * @return array<\Google\Analytics\Data\V1beta\Dimension>
-        */
+    /**
+    * @return array<\Google\Analytics\Data\V1beta\Dimension>
+    */
     protected function buildDatesDimensions(): array
     {
         $dimensions = $this->buildTermsDimensions();
