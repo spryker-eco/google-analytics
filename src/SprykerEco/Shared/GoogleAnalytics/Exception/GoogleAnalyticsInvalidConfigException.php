@@ -11,8 +11,10 @@ use Exception;
 
 class GoogleAnalyticsInvalidConfigException extends Exception
 {
+    protected const string MESSAGE_TEMPLATE = 'Google Analytics setting "%s" is invalid or missing. Set it in the "Integrations > Google Analytics" configuration section.';
+
     public function __construct(string $configKey)
     {
-        parent::__construct(sprintf('Google Analytics configuration %s is invalid', $configKey));
+        parent::__construct(sprintf(static::MESSAGE_TEMPLATE, $configKey));
     }
 }
