@@ -6,15 +6,14 @@ features:
       enabled: true
       order: 100
       tabs:
-        - key: google_analytics
-          name: Google Analytics
-          description: Google Analytics 4 integration settings. Used for search statistics.
-          enabled: true
-          order: 0
-          
-          groups:
+          - key: google_analytics
+            name: Google Analytics
+            description: Google Analytics 4 integration settings. Used for search statistics.
+            enabled: true
+            order: 0
+            groups:
                 - key: tracking
-                  name: Tracking
+                  name: Storefront Tracking
                   description: Storefront tracking configuration for GA4 using gtag.js.
                   enabled: true
                   order: 0
@@ -42,12 +41,11 @@ features:
                               message: 'Must be a valid key (starts with G- and has min 6 symbols after -).'
                               options:
                                   pattern: '^G-[A-Za-z0-9]{6,}$'
-
                 - key: connection
-                  name: Connection
+                  name: Data API Connection
                   description: Connection settings for the Google Analytics Data API (GA4).
                   enabled: true
-                  order: 0
+                  order: 1
                   scopes:
                       - global
                   settings:

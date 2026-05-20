@@ -317,8 +317,8 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
     }
 
     /**
-    * @return array<\Google\Analytics\Data\V1beta\Dimension>
-    */
+     * @return array<\Google\Analytics\Data\V1beta\Dimension>
+     */
     protected function buildDatesDimensions(): array
     {
         $dimensions = $this->buildTermsDimensions();
