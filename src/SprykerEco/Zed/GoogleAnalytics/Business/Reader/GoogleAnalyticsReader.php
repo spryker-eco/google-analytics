@@ -53,12 +53,11 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
 
     protected const string DIMENSION_DATE = 'date';
 
-    // These are the expected GA4 dimension names once registered in the property.
-    // The actual names used come from GoogleAnalyticsConfig::getStoreDimensionName() / getLocaleDimensionName().
-    // A null return from config means the dimension is not registered — it is excluded from all requests.
     protected const string METRIC_EVENT_COUNT = 'eventCount';
 
-    // GA4 returns this sentinel when a custom dimension was not set on the event
+    /**
+     * GA4 sentinel value returned for a custom dimension that was not set on the event.
+     */
     protected const string GA4_NOT_SET = '(not set)';
 
     public function __construct(
@@ -67,13 +66,21 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
     ) {
     }
 
+    /**
+     * Issues up to two GA4 reports:
+     *  - Call 1: fetch paginated search terms with event counts
+     *  - Call 2 (only when {@link GoogleAnalyticsEventConditionsTransfer::$withLastOccurred} is set):
+     *    fetch last occurred dates for the current page terms only.
+     *    A single report combining searchTerm+date dimensions cannot be paginated
+     *    by unique term — GA4 returns one row per (term, date) pair, so limit=50
+     *    gives 50 pairs, not 50 unique terms.
+     */
     public function getEventCollection(
         GoogleAnalyticsEventCriteriaTransfer $googleAnalyticsEventCriteriaTransfer,
     ): GoogleAnalyticsEventCollectionTransfer {
         $this->resolveConditions($googleAnalyticsEventCriteriaTransfer->getConditionsOrFail());
 
         try {
-            // Call 1: fetch paginated search terms with event counts
             $termsResponse = $this->runTermsReport($googleAnalyticsEventCriteriaTransfer);
         } catch (GoogleAnalyticsInvalidConfigException | ApiException | ValidationException $e) {
             $this->getLogger()->error('Search statistics report failed', ['exception' => $e]);
@@ -93,10 +100,6 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
             return $googleAnalyticsEventCollectionTransfer;
         }
 
-        // Call 2: fetch last occurred dates for the current page terms only.
-        // A single report combining searchTerm+date dimensions cannot be paginated
-        // by unique term — GA4 returns one row per (term, date) pair, so limit=50
-        // gives 50 pairs, not 50 unique terms.
         try {
             $lastOccurredMap = $this->runDatesReport(
                 $googleAnalyticsEventCriteriaTransfer,
@@ -240,11 +243,9 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
         ]);
     }
 
-     /**
-      * @param array<string> $terms
-      *
-      * @return array<string, string>
-      */
+    /**
+     * @return array<string, string>
+     */
     protected function runDatesReport(
         GoogleAnalyticsEventCriteriaTransfer $googleAnalyticsEventCriteriaTransfer,
         GoogleAnalyticsEventCollectionTransfer $googleAnalyticsEventCollectionTransfer,
@@ -354,6 +355,9 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
     }
 
     /**
+     * Relies on the response being ordered by date DESC, so the first occurrence
+     * per compound key is the latest one and any later duplicates can be skipped.
+     *
      * @return array<string, string> Keyed by "term|store|locale" compound key
      */
     protected function buildLastOccurredMap(RunReportResponse $response): array
@@ -377,7 +381,6 @@ class GoogleAnalyticsReader implements GoogleAnalyticsReaderInterface
 
             $key = sprintf('%s|%s|%s', $term, $store, $locale);
 
-            // Response is ordered date DESC — first occurrence per compound key is the latest
             if (isset($map[$key])) {
                 continue;
             }
