@@ -9,16 +9,16 @@ declare(strict_types = 1);
 
 namespace SprykerEco\Zed\GoogleAnalytics;
 
-use RuntimeException;
 use Spryker\Zed\Kernel\AbstractBundleConfig;
+use SprykerEco\Shared\GoogleAnalytics\Exception\GoogleAnalyticsInvalidConfigException;
 
 class GoogleAnalyticsConfig extends AbstractBundleConfig
 {
     protected const string CONFIGURATION_KEY_GOOGLE_ANALYTICS_DATA_API_CONNECTION_PROPERTY_ID
-        = 'google_analytics:data_api:connection:property_id';
+        = 'integrations:google_analytics:connection:property_id';
 
     protected const string CONFIGURATION_KEY_GOOGLE_ANALYTICS_DATA_API_CONNECTION_SERVICE_ACCOUNT_CREDENTIALS_JSON
-        = 'google_analytics:data_api:connection:service_account_credentials_json';
+        = 'integrations:google_analytics:connection:service_account_credentials_json';
 
     protected const array DATE_RANGE_PRESETS = [
         '-1 day' => 'Last 24 hours',
@@ -67,7 +67,7 @@ class GoogleAnalyticsConfig extends AbstractBundleConfig
         ), true);
 
         if (!$serviceAccountCredentials) {
-            throw new RuntimeException('Google Analytics credentials are not configured.');
+            throw new GoogleAnalyticsInvalidConfigException(static::CONFIGURATION_KEY_GOOGLE_ANALYTICS_DATA_API_CONNECTION_SERVICE_ACCOUNT_CREDENTIALS_JSON);
         }
 
         return $serviceAccountCredentials;

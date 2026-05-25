@@ -50,6 +50,11 @@
     <transfer name="GoogleAnalyticsEventCollection" strict="true">
         <property name="events" type="GoogleAnalyticsEvent[]" singular="event"/>
         <property name="pagination" type="Pagination"/>
+        <property name="errors" type="Error[]" singular="error"/>
+    </transfer>
+
+    <transfer name="Error">
+        <property name="message" type="string"/>
     </transfer>
 
 </transfers>

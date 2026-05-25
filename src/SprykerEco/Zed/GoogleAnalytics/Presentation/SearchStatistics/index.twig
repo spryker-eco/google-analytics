@@ -39,9 +39,15 @@
                                             <td>{{ event.count }}</td>
                                         </tr>
                                     {% else %}
-                                        <tr>
-                                            <td colspan="2">{{ 'No data available.' | trans }}</td>
-                                        </tr>
+                                        {% for error in searchCollection.errors %}
+                                            <tr>
+                                                <td colspan="2">{{ error.message }}</td>
+                                            </tr>
+                                        {% else %}
+                                            <tr>
+                                                <td colspan="2">{{ 'No data available.' | trans }}</td>
+                                            </tr>
+                                        {% endfor %}
                                     {% endfor %}
                                 </tbody>
                             </table>
@@ -76,9 +82,15 @@
                                             <td>{{ event.count }}</td>
                                         </tr>
                                     {% else %}
-                                        <tr>
-                                            <td colspan="2">{{ 'No data available.' | trans }}</td>
-                                        </tr>
+                                        {% for error in zeroResultsCollection.errors %}
+                                            <tr>
+                                                <td colspan="2">{{ error.message }}</td>
+                                            </tr>
+                                        {% else %}
+                                            <tr>
+                                                <td colspan="2">{{ 'No data available.' | trans }}</td>
+                                            </tr>
+                                        {% endfor %}
                                     {% endfor %}
                                 </tbody>
                             </table>

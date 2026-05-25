@@ -9,7 +9,6 @@ declare(strict_types = 1);
 
 namespace SprykerEco\Zed\GoogleAnalytics\Business;
 
-use Google\Analytics\Data\V1beta\Client\BetaAnalyticsDataClient;
 use Spryker\Zed\Kernel\Business\AbstractBusinessFactory;
 use SprykerEco\Zed\GoogleAnalytics\Business\Client\GoogleAnalyticsDataClient;
 use SprykerEco\Zed\GoogleAnalytics\Business\Client\GoogleAnalyticsDataClientInterface;
@@ -28,14 +27,6 @@ class GoogleAnalyticsBusinessFactory extends AbstractBusinessFactory
 
     public function createGoogleAnalyticsDataClient(): GoogleAnalyticsDataClientInterface
     {
-        return new GoogleAnalyticsDataClient($this->createBetaAnalyticsDataClient());
-    }
-
-    public function createBetaAnalyticsDataClient(): BetaAnalyticsDataClient
-    {
-        return new BetaAnalyticsDataClient([
-            'credentials' => $this->getConfig()->getServiceAccountCredentialsJson(),
-            'transport' => 'rest',
-        ]);
+        return new GoogleAnalyticsDataClient($this->getConfig());
     }
 }

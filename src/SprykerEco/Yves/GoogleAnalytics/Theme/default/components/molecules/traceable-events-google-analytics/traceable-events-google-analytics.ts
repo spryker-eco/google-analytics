@@ -70,6 +70,10 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         const hasNoResults = resultsCount === 0 && searchTerm;
         const eventName = hasNoResults ? 'zero_search_results' : 'search_results';
         
+        if (!searchTerm) {
+            return;
+        }
+
         window.gtag('event', eventName, {
             search_term: searchTerm,
             event_category: 'Search results',

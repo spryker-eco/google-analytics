@@ -1,19 +1,19 @@
 # yaml-language-server: $schema=../../../../Spryker/Configuration/resources/configuration/configuration-schema-v1.json
 features:
-    - key: google_analytics
-      name: Google Analytics
-      description: Google Analytics 4 integration settings.
+    - key: integrations
+      name: Integrations
+      description: Third-party integrations configuration.
       enabled: true
-      order: 0
+      order: 100
       tabs:
-          - key: storefront
-            name: Storefront
-            description: Settings for the storefront tracking snippet.
+          - key: google_analytics
+            name: Google Analytics
+            description: Google Analytics 4 integration settings. Used for search statistics.
             enabled: true
             order: 0
             groups:
                 - key: tracking
-                  name: Tracking
+                  name: Storefront Tracking
                   description: Storefront tracking configuration for GA4 using gtag.js.
                   enabled: true
                   order: 0
@@ -41,18 +41,11 @@ features:
                               message: 'Must be a valid key (starts with G- and has min 6 symbols after -).'
                               options:
                                   pattern: '^G-[A-Za-z0-9]{6,}$'
-
-          - key: data_api
-            name: Data API
-            description: Credentials and identifiers for querying GA4 reports via the Google Analytics Data API.
-            enabled: true
-            order: 1
-            groups:
                 - key: connection
-                  name: Connection
+                  name: Data API Connection
                   description: Connection settings for the Google Analytics Data API (GA4).
                   enabled: true
-                  order: 0
+                  order: 1
                   scopes:
                       - global
                   settings:
