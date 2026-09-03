@@ -7,7 +7,7 @@
         "google/analytics-data": "^0.22",
         "google/gax": "^1.0.0",
         "php": ">=8.3",
-        "spryker/gui": "^5.0.0",
+        "spryker/gui": "^5.5.0",
         "spryker/kernel": "^3.46.0",
         "spryker/locale": "^4.0.0",
         "spryker/log": "^3.0.0",

@@ -7,8 +7,7 @@
 
 const init = () => {
     const dateRangeSelect = document.querySelector('.js-date-range-control');
-    const dateRangeInputs = document.querySelectorAll('.js-date');
-    console.log('dateRangeSelect',dateRangeSelect);
+    const dateRangeInputs = document.querySelectorAll('.js-google-analytics-date');
 
     if (!dateRangeSelect || dateRangeInputs.length === 0) {
         return;
@@ -21,6 +20,12 @@ const init = () => {
             input.disabled = !shouldEnable;
 
             if (!shouldEnable) {
+                if (input.flatpickrInstance) {
+                    input.flatpickrInstance.clear();
+
+                    return;
+                }
+
                 input.value = '';
             }
         });

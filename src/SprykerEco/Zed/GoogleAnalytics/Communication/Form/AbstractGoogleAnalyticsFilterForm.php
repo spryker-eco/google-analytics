@@ -9,9 +9,9 @@ declare(strict_types = 1);
 
 namespace SprykerEco\Zed\GoogleAnalytics\Communication\Form;
 
+use Spryker\Zed\Gui\Communication\Form\Type\DatePickerType;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\Form\Extension\Core\Type\ChoiceType;
-use Symfony\Component\Form\Extension\Core\Type\DateType;
 use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\OptionsResolver\OptionsResolver;
 
@@ -31,6 +31,10 @@ abstract class AbstractGoogleAnalyticsFilterForm extends AbstractType
 
     protected const string OPTION_LOCALE_CHOICES = 'locale_choices';
 
+    protected const string RANGE_GROUP_DATE = 'google-analytics-date-range';
+
+    protected const string CUSTOM_RANGE_FIELD_CLASS = 'js-google-analytics-date';
+
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
         $builder->setMethod('GET');
@@ -42,20 +46,20 @@ abstract class AbstractGoogleAnalyticsFilterForm extends AbstractType
                 'required' => false,
                 'placeholder' => 'Custom range',
             ])
-            ->add(static::FIELD_START_DATE, DateType::class, [
-                'widget' => 'single_text',
+            ->add(static::FIELD_START_DATE, DatePickerType::class, [
                 'required' => false,
-                'html5' => false,
+                'range_group' => static::RANGE_GROUP_DATE,
+                'range_role' => DatePickerType::RANGE_ROLE_START,
                 'attr' => [
-                    'class' => 'js-date js-from-date',
+                    'class' => static::CUSTOM_RANGE_FIELD_CLASS,
                 ],
             ])
-            ->add(static::FIELD_END_DATE, DateType::class, [
-                'widget' => 'single_text',
+            ->add(static::FIELD_END_DATE, DatePickerType::class, [
                 'required' => false,
-                'html5' => false,
+                'range_group' => static::RANGE_GROUP_DATE,
+                'range_role' => DatePickerType::RANGE_ROLE_END,
                 'attr' => [
-                    'class' => 'js-date js-to-date',
+                    'class' => static::CUSTOM_RANGE_FIELD_CLASS,
                 ],
             ])
             ->add(static::FIELD_STORE, ChoiceType::class, [
