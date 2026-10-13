@@ -12,7 +12,10 @@
 {% set shouldRender = data.gtagId is defined %}
 
 {# The schema default is `true`; the fallback keeps the event on while the configuration schema is not synced yet. #}
-{% set isSearchEventEnabled = configurationValue('integrations:google_analytics:product_events:search', true) is same as(true) %}
+{% set searchEventSetting = configurationValue('integrations:google_analytics:product_events:search', true) %}
+{# The stored value arrives as the string 'true'/'false'; the fallback is a boolean. Compared strictly, because 'false' == true in PHP. #}
+{% set isSearchEventEnabled = searchEventSetting is same as(true) or searchEventSetting is same as('true') %}
+
 
 {% define attributes = {
     initial: shouldRender
