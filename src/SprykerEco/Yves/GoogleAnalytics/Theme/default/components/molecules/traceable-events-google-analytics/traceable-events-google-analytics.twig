@@ -11,12 +11,18 @@
 
 {% set shouldRender = data.gtagId is defined %}
 
+{# The schema default is `true`; the fallback keeps the event on while the configuration schema is not synced yet. #}
+{% set isSearchEventEnabled = configurationValue('integrations:google_analytics:product_events:search', true) is same as(true) %}
+
 {% define attributes = {
     initial: shouldRender
         ? {
             appId: data.gtagId,
             store: app.store,
             locale: app.locale,
+            events: {
+                search: isSearchEventEnabled,
+            },
         } | json_encode
         : {},
     'traceable-adapter': true,

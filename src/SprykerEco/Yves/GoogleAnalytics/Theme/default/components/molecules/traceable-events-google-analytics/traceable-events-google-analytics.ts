@@ -22,10 +22,15 @@ interface GtagFunction {
     (command: 'event', eventName: string, params?: Record<string, unknown>): void;
 }
 
+interface EnabledEvents {
+    search: boolean;
+}
+
 interface InitialData {
     appId: string;
     store: string;
     locale: string;
+    events: EnabledEvents;
 }
 
 interface SearchEventData extends EventsHandlerData<EventName> {
@@ -60,9 +65,13 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     }
 
     override getHandlers(): Partial<TraceableEventHandlers> {
-        return {
-            SEARCH_EVENT: [this.searchEventHandler],
-        };
+        const handlers: Partial<TraceableEventHandlers> = {};
+
+        if (this.enabledEvents.search) {
+            handlers.SEARCH_EVENT = [this.searchEventHandler];
+        }
+
+        return handlers;
     }
 
     protected searchEventHandler(data: SearchEventData): void {
@@ -82,6 +91,10 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             store: this.currentStore,
             locale: this.currentLocale,
         });
+    }
+
+    protected get enabledEvents(): EnabledEvents {
+        return this.initialData.events;
     }
 
     protected get initialData(): InitialData {

@@ -77,3 +77,369 @@ features:
                             - global
                         constraints:
                             - type: 'SprykerEco\Zed\GoogleAnalytics\Communication\Constraint\GoogleAnalyticsCredentialsJsonFormatConstraint'
+                - key: product_events
+                  name: Product Events
+                  description: Product discovery and interaction events.
+                  toggle_all: true
+                  layout: compact
+                  enabled: true
+                  order: 2
+                  scopes:
+                      - global
+                      - store
+                  settings:
+                      - key: view_item
+                        name: View item
+                        description: 'Product detail page is viewed. GA4 event: view_item.'
+                        type: boolean
+                        default_value: true
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 0
+                        scopes:
+                            - global
+                            - store
+                      - key: view_item_list
+                        name: View item list
+                        description: 'Product list (category, search results) is viewed. GA4 event: view_item_list.'
+                        type: boolean
+                        default_value: true
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 1
+                        scopes:
+                            - global
+                            - store
+                      - key: select_item
+                        name: Select item
+                        description: 'Product is clicked in a product list. GA4 event: select_item.'
+                        type: boolean
+                        default_value: true
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 2
+                        scopes:
+                            - global
+                            - store
+                      - key: search
+                        name: Search
+                        description: 'Storefront search is performed. GA4 events: search_results, zero_search_results.'
+                        type: boolean
+                        default_value: true
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 3
+                        scopes:
+                            - global
+                            - store
+                      - key: product_configurator_used
+                        name: Product configurator used
+                        description: 'Product configurator is used. GA4 event: product_configurator_used.'
+                        type: boolean
+                        default_value: true
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 4
+                        scopes:
+                            - global
+                            - store
+                - key: cart_events
+                  name: Cart Events
+                  description: Cart interaction events.
+                  toggle_all: true
+                  layout: compact
+                  enabled: true
+                  order: 3
+                  scopes:
+                      - global
+                      - store
+                  settings:
+                      - key: add_to_cart
+                        name: Add to cart
+                        description: 'Product is added to the cart. GA4 event: add_to_cart.'
+                        type: boolean
+                        default_value: true
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 0
+                        scopes:
+                            - global
+                            - store
+                      - key: remove_from_cart
+                        name: Remove from cart
+                        description: 'Product is removed from the cart. GA4 event: remove_from_cart.'
+                        type: boolean
+                        default_value: true
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 1
+                        scopes:
+                            - global
+                            - store
+                      - key: view_cart
+                        name: View cart
+                        description: 'Cart page is viewed. GA4 event: view_cart.'
+                        type: boolean
+                        default_value: true
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 2
+                        scopes:
+                            - global
+                            - store
+                      - key: reorder
+                        name: Reorder
+                        description: 'Previous order is reordered. GA4 event: reorder.'
+                        type: boolean
+                        default_value: true
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 3
+                        scopes:
+                            - global
+                            - store
+                      - key: bulk_order_upload
+                        name: Bulk order upload
+                        description: 'Products are added to the cart in bulk (quick order, file upload). GA4 event: bulk_order_upload.'
+                        type: boolean
+                        default_value: true
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 4
+                        scopes:
+                            - global
+                            - store
+                - key: customer_list_events
+                  name: Customer List Events
+                  description: Shopping list and wishlist events.
+                  toggle_all: true
+                  layout: compact
+                  enabled: true
+                  order: 4
+                  scopes:
+                      - global
+                      - store
+                  settings:
+                      - key: add_to_shopping_list
+                        name: Add to shopping list
+                        description: 'Product is added to a shopping list. GA4 event: add_to_shopping_list.'
+                        type: boolean
+                        default_value: true
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 0
+                        scopes:
+                            - global
+                            - store
+                      - key: create_shopping_list
+                        name: Create shopping list
+                        description: 'Shopping list is created. GA4 event: create_shopping_list.'
+                        type: boolean
+                        default_value: true
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 1
+                        scopes:
+                            - global
+                            - store
+                      - key: add_to_wishlist
+                        name: Add to wishlist
+                        description: 'Product is added to a wishlist. GA4 event: add_to_wishlist.'
+                        type: boolean
+                        default_value: true
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 2
+                        scopes:
+                            - global
+                            - store
+                - key: checkout_events
+                  name: Checkout Events
+                  description: Checkout funnel events.
+                  toggle_all: true
+                  layout: compact
+                  enabled: true
+                  order: 5
+                  scopes:
+                      - global
+                      - store
+                  settings:
+                      - key: begin_checkout
+                        name: Begin checkout
+                        description: 'Checkout is started. GA4 event: begin_checkout.'
+                        type: boolean
+                        default_value: true
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 0
+                        scopes:
+                            - global
+                            - store
+                      - key: add_shipping_info
+                        name: Add shipping info
+                        description: 'Shipping information is submitted. GA4 event: add_shipping_info.'
+                        type: boolean
+                        default_value: true
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 1
+                        scopes:
+                            - global
+                            - store
+                      - key: add_payment_info
+                        name: Add payment info
+                        description: 'Payment information is submitted. GA4 event: add_payment_info.'
+                        type: boolean
+                        default_value: true
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 2
+                        scopes:
+                            - global
+                            - store
+                      - key: purchase
+                        name: Purchase
+                        description: 'Order is placed. GA4 event: purchase.'
+                        type: boolean
+                        default_value: true
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 3
+                        scopes:
+                            - global
+                            - store
+                - key: quote_events
+                  name: Quote Events
+                  description: Quote request and quote approval events.
+                  toggle_all: true
+                  layout: compact
+                  enabled: true
+                  order: 6
+                  scopes:
+                      - global
+                      - store
+                  settings:
+                      - key: request_quote
+                        name: Request quote
+                        description: 'Quote request is created. GA4 event: request_quote.'
+                        type: boolean
+                        default_value: true
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 0
+                        scopes:
+                            - global
+                            - store
+                      - key: quote_submitted
+                        name: Quote submitted
+                        description: 'Quote request is submitted. GA4 event: quote_submitted.'
+                        type: boolean
+                        default_value: true
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 1
+                        scopes:
+                            - global
+                            - store
+                      - key: quote_approved
+                        name: Quote approved
+                        description: 'Quote is approved. GA4 event: quote_approved.'
+                        type: boolean
+                        default_value: true
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 2
+                        scopes:
+                            - global
+                            - store
+                      - key: quote_approval_requested
+                        name: Quote approval requested
+                        description: 'Approval is requested for a cart. GA4 event: quote_approval_requested.'
+                        type: boolean
+                        default_value: true
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 3
+                        scopes:
+                            - global
+                            - store
+                      - key: quote_approval_granted
+                        name: Quote approval granted
+                        description: 'Approver grants the approval request. GA4 event: quote_approval_granted.'
+                        type: boolean
+                        default_value: true
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 4
+                        scopes:
+                            - global
+                            - store
+                      - key: quote_approval_rejected
+                        name: Quote approval rejected
+                        description: 'Approver rejects the approval request. GA4 event: quote_approval_rejected.'
+                        type: boolean
+                        default_value: true
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 5
+                        scopes:
+                            - global
+                            - store
+                - key: company_events
+                  name: Company Events
+                  description: Company context switch events.
+                  toggle_all: true
+                  layout: compact
+                  enabled: true
+                  order: 7
+                  scopes:
+                      - global
+                      - store
+                  settings:
+                      - key: switch_company_account
+                        name: Switch company account
+                        description: 'Customer switches the company account. GA4 event: switch_company_account.'
+                        type: boolean
+                        default_value: true
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 0
+                        scopes:
+                            - global
+                            - store
+                      - key: switch_business_unit
+                        name: Switch business unit
+                        description: 'Customer switches the business unit. GA4 event: switch_business_unit.'
+                        type: boolean
+                        default_value: true
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 1
+                        scopes:
+                            - global
+                            - store
