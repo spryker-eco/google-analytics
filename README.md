@@ -4,6 +4,12 @@
 
 Provides Google Analytics 4 (GA4) integration for Spryker. Tracks storefront search events (searches with results and zero-result searches) via `gtag`, and surfaces the collected data as search statistics dashboards in the Back Office using the GA4 Data API.
 
+## Installation
+
+```bash
+composer require spryker-eco/google-analytics
+```
+
 ## Features
 
 - Storefront TypeScript component that pushes `search_results` and `zero_search_results` events to GA4 via `gtag`, including store and locale as custom parameters
