@@ -16,7 +16,6 @@
 {# The stored value arrives as the string 'true'/'false'; the fallback is a boolean. Compared strictly, because 'false' == true in PHP. #}
 {% set isSearchEventEnabled = searchEventSetting is same as(true) or searchEventSetting is same as('true') %}
 
-
 {% define attributes = {
     initial: shouldRender
         ? {
