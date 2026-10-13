@@ -7,13 +7,16 @@
         "google/analytics-data": "^0.22",
         "google/gax": "^1.0.0",
         "php": ">=8.3",
+        "spryker/configuration": "^1.6.0",
         "spryker/gui": "^5.5.0",
         "spryker/kernel": "^3.46.0",
         "spryker/locale": "^4.0.0",
         "spryker/log": "^3.0.0",
         "spryker/store": "^1.28.0",
         "spryker/symfony": "^3.0.0",
-        "spryker/util-text": "^1.1.0"
+        "spryker/util-text": "^1.1.0",
+        "spryker-shop/shop-ui": "^1.105.0 || ^2.0.0",
+        "spryker-shop/traceable-event-widget": "^1.2.0"
     },
     "require-dev": {
         "phpstan/phpstan": "*",
