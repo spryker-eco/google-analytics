@@ -22,9 +22,8 @@ interface GtagFunction {
     (command: 'event', eventName: string, params?: Record<string, unknown>): void;
 }
 
-interface EnabledEvents {
-    search: boolean;
-}
+// Event name mapped to its on/off state, e.g. `search` for the `search_event_ebabled` Back Office setting.
+type EnabledEvents = Record<string, boolean>;
 
 interface InitialData {
     appId: string;
@@ -67,7 +66,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     override getHandlers(): Partial<TraceableEventHandlers> {
         const handlers: Partial<TraceableEventHandlers> = {};
 
-        if (this.enabledEvents.search) {
+        if (this.isEventEnabled('search')) {
             handlers.SEARCH_EVENT = [this.searchEventHandler];
         }
 
@@ -93,8 +92,11 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         });
     }
 
-    protected get enabledEvents(): EnabledEvents {
-        return this.initialData.events;
+    // An event missing from the map stays on, so tracking keeps working while the configuration schema is not synced yet.
+    protected isEventEnabled(eventName: string): boolean {
+        const isEventDisabled = this.initialData.events[eventName] === false;
+
+        return !isEventDisabled;
     }
 
     protected get initialData(): InitialData {

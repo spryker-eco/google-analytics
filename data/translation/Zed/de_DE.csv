@@ -24,3 +24,7 @@ Locale,Sprachraum
 "Service account credentials must be a valid JSON object.","Die Dienstkonto-Anmeldedaten müssen ein gültiges JSON-Objekt sein."
 "Property ID is required when service account credentials JSON is set.","Die Property-ID ist erforderlich, wenn die Dienstkonto-Anmeldedaten JSON gesetzt sind."
 "Service account credentials JSON is required when Property ID is set.","Die Dienstkonto-Anmeldedaten JSON sind erforderlich, wenn die Property-ID gesetzt ist."
+"Product Events",Produktereignisse
+"Product discovery and interaction events.","Ereignisse zur Produktsuche und Produktinteraktion."
+Search,Suche
+"Storefront search is performed. GA4 events: search_results, zero_search_results.","Im Shop wird eine Suche ausgeführt. GA4-Ereignisse: search_results, zero_search_results."
