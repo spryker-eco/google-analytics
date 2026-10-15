@@ -82,7 +82,7 @@ features:
                   description: Product discovery and interaction events.
                   toggle_all: true
                   layout: compact
-                  enabled: false
+                  enabled: true
                   order: 2
                   scopes:
                       - global
@@ -92,7 +92,7 @@ features:
                         name: Search
                         description: 'Storefront search is performed. GA4 events: search_results, zero_search_results.'
                         type: boolean
-                        default_value: true
+                        default_value: false
                         enabled: true
                         secret: false
                         storefront: true
