@@ -82,7 +82,7 @@ features:
                   description: Product discovery and interaction events.
                   toggle_all: true
                   layout: compact
-                  enabled: true
+                  enabled: false
                   order: 2
                   scopes:
                       - global
