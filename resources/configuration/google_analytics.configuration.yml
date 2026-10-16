@@ -11,6 +11,10 @@ features:
             description: Google Analytics 4 integration settings. Used for search statistics.
             enabled: true
             order: 0
+            sections:
+                - key: event_tracking
+                  name: Event Tracking
+                  description: Storefront events sent to Google Analytics 4. A disabled event is not tracked.
             groups:
                 - key: tracking
                   name: Storefront Tracking
@@ -80,6 +84,7 @@ features:
                 - key: product_events
                   name: Product Events
                   description: Product discovery and interaction events.
+                  section: event_tracking
                   toggle_all: true
                   layout: compact
                   enabled: true
@@ -100,5 +105,3 @@ features:
                         scopes:
                             - global
                             - store
-
-

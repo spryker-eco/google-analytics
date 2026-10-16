@@ -24,6 +24,8 @@ Locale,Locale
 "Service account credentials must be a valid JSON object.","Service account credentials must be a valid JSON object."
 "Property ID is required when service account credentials JSON is set.","Property ID is required when service account credentials JSON is set."
 "Service account credentials JSON is required when Property ID is set.","Service account credentials JSON is required when Property ID is set."
+"Event Tracking","Event Tracking"
+"Storefront events sent to Google Analytics 4. A disabled event is not tracked.","Storefront events sent to Google Analytics 4. A disabled event is not tracked."
 "Product Events","Product Events"
 "Product discovery and interaction events.","Product discovery and interaction events."
 Search,Search
