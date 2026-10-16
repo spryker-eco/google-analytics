@@ -11,6 +11,10 @@ features:
             description: Google Analytics 4 integration settings. Used for search statistics.
             enabled: true
             order: 0
+            sections:
+                - key: event_tracking
+                  name: Event Tracking
+                  description: Storefront events sent to Google Analytics 4. A disabled event is not tracked.
             groups:
                 - key: tracking
                   name: Storefront Tracking
@@ -77,3 +81,27 @@ features:
                             - global
                         constraints:
                             - type: 'SprykerEco\Zed\GoogleAnalytics\Communication\Constraint\GoogleAnalyticsCredentialsJsonFormatConstraint'
+                - key: product_events
+                  name: Product Events
+                  description: Product discovery and interaction events.
+                  section: event_tracking
+                  toggle_all: true
+                  layout: compact
+                  enabled: true
+                  order: 2
+                  scopes:
+                      - global
+                      - store
+                  settings:
+                      - key: search_event_ebabled
+                        name: Search
+                        description: 'Storefront search is performed. GA4 events: search_results, zero_search_results.'
+                        type: boolean
+                        default_value: false
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 3
+                        scopes:
+                            - global
+                            - store

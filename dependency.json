@@ -1,0 +1,7 @@
+{
+    "include": {
+        "spryker/configuration": "Provides the Back Office configuration that holds the GA4 event settings.",
+        "spryker-shop/shop-ui": "ShopUi provides basic frontend infrastructure and the configurationValue() Twig function.",
+        "spryker-shop/traceable-event-widget": "Required for event tracking."
+    }
+}
