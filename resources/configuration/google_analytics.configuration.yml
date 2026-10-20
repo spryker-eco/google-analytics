@@ -105,3 +105,27 @@ features:
                         scopes:
                             - global
                             - store
+                      - key: add_to_cart_event_ebabled
+                        name: Add to Cart
+                        description: 'A product is added to the cart, or a cart item quantity is raised. GA4 event: add_to_cart.'
+                        type: boolean
+                        default_value: false
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 4
+                        scopes:
+                            - global
+                            - store
+                      - key: remove_from_cart_event_ebabled
+                        name: Remove from Cart
+                        description: 'A product is removed from the cart, or a cart item quantity is lowered. GA4 event: remove_from_cart.'
+                        type: boolean
+                        default_value: false
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 5
+                        scopes:
+                            - global
+                            - store

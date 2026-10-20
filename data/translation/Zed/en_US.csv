@@ -30,3 +30,7 @@ Locale,Locale
 "Product discovery and interaction events.","Product discovery and interaction events."
 Search,Search
 "Storefront search is performed. GA4 events: search_results, zero_search_results.","Storefront search is performed. GA4 events: search_results, zero_search_results."
+"Add to Cart","Add to Cart"
+"A product is added to the cart, or a cart item quantity is raised. GA4 event: add_to_cart.","A product is added to the cart, or a cart item quantity is raised. GA4 event: add_to_cart."
+"Remove from Cart","Remove from Cart"
+"A product is removed from the cart, or a cart item quantity is lowered. GA4 event: remove_from_cart.","A product is removed from the cart, or a cart item quantity is lowered. GA4 event: remove_from_cart."

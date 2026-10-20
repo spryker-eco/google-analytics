@@ -9,7 +9,8 @@
     gtagId: null,
 } %}
 
-{% set shouldRender = data.gtagId is defined %}
+{# Without a Measurement ID nothing is loaded or sent; `is defined` was also true for the empty setting. #}
+{% set shouldRender = data.gtagId is not empty %}
 
 {# Event settings are named `<event>_event_ebabled`, e.g. `search_event_ebabled`. #}
 {% set eventSettingSuffix = '_event_ebabled' %}
