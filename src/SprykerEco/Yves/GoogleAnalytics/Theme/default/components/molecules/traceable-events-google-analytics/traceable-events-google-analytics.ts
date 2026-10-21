@@ -51,9 +51,16 @@ interface ProductDetails {
     sku: string;
     name?: string;
     brand?: string;
+    variant?: string;
+    // Only the PDP sends it: its schema.org category list, root to leaf. Cart lines carry no category.
+    categories?: ProductCategory[];
     price?: number;
     quantity?: number;
     newQuantity?: number;
+}
+
+interface ProductCategory {
+    name?: string;
 }
 
 interface CartEventData extends EventsHandlerData<EventName> {
@@ -75,6 +82,8 @@ interface GtagItem {
     item_id: string;
     item_name: string;
     item_brand?: string;
+    item_category?: string;
+    item_variant?: string;
     price?: number;
     quantity: number;
 }
@@ -229,6 +238,16 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
                 item.item_brand = String(product.brand);
             }
 
+            if (product.variant) {
+                item.item_variant = String(product.variant);
+            }
+
+            const category = this.findAssignedCategory(product);
+
+            if (category) {
+                item.item_category = category;
+            }
+
             if (price !== undefined) {
                 item.price = price;
             }
@@ -237,6 +256,17 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         }
 
         return Array.from(itemsBySku.values());
+    }
+
+    // The last entry of the root-to-leaf list is a category the product is assigned to, e.g. "Tablets" under "Computer".
+    protected findAssignedCategory(product: ProductDetails): string | undefined {
+        const lastCategory = product.categories?.[product.categories.length - 1];
+
+        if (!lastCategory?.name) {
+            return undefined;
+        }
+
+        return String(lastCategory.name);
     }
 
     protected getItemsValue(items: GtagItem[]): number | undefined {

@@ -105,6 +105,18 @@ features:
                         scopes:
                             - global
                             - store
+                - key: cart_events
+                  name: Cart Events
+                  description: Product discovery and interaction events.
+                  section: event_tracking
+                  toggle_all: true
+                  layout: compact
+                  enabled: true
+                  order: 2
+                  scopes:
+                      - global
+                      - store
+                  settings:
                       - key: add_to_cart_event_ebabled
                         name: Add to Cart
                         description: 'A product is added to the cart, or a cart item quantity is raised. GA4 event: add_to_cart.'
