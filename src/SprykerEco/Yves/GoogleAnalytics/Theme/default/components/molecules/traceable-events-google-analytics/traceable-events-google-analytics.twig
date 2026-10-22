@@ -12,8 +12,8 @@
 {# Without a Measurement ID nothing is loaded or sent; `is defined` was also true for the empty setting. #}
 {% set shouldRender = data.gtagId is not empty %}
 
-{# Event settings are named `<event>_event_ebabled`, e.g. `search_event_ebabled`. #}
-{% set eventSettingSuffix = '_event_ebabled' %}
+{# Event settings are named `<event>_event_enabled`, e.g. `search_event_enabled`. #}
+{% set eventSettingSuffix = '_event_enabled' %}
 
 {# Maps every event setting to its on/off state by event name, e.g. { search: true }; other settings of the tab never reach the page. #}
 {% set enabledEvents = {} %}

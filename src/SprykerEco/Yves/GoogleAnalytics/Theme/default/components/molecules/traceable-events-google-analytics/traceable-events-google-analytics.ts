@@ -3,7 +3,11 @@ import {
     BaseTraceableEventAdapter,
     TraceableEventHandlers,
 } from 'TraceableEventWidget/components/molecules/traceable-events-orchestrator/base-traceable-event-adapter';
-import { EventsHandlerData, EventName } from 'TraceableEventWidget/components/molecules/traceable-events-orchestrator/traceable-events-orchestrator';
+import {
+    EventsHandlerData,
+    EventName,
+    TraceableEventHandler,
+} from 'TraceableEventWidget/components/molecules/traceable-events-orchestrator/traceable-events-orchestrator';
 
 declare global {
     interface SPRYKER_EVENTS {
@@ -26,7 +30,7 @@ interface GtagFunction {
     (command: 'event', eventName: string, params?: Record<string, unknown>): void;
 }
 
-// Event name mapped to its on/off state, e.g. `search` for the `search_event_ebabled` Back Office setting.
+// Event name mapped to its on/off state, e.g. `search` for the `search_event_enabled` Back Office setting.
 type EnabledEvents = Record<string, boolean>;
 
 interface InitialData {
@@ -57,6 +61,8 @@ interface ProductDetails {
     price?: number;
     quantity?: number;
     newQuantity?: number;
+    // The position in a product list, from 0.
+    index?: number;
 }
 
 interface ProductCategory {
@@ -66,6 +72,26 @@ interface ProductCategory {
 interface CartEventData extends EventsHandlerData<EventName> {
     currency: string;
     products?: ProductDetails[];
+}
+
+interface PageLoadData extends EventsHandlerData<EventName> {
+    currency: string;
+    products?: ProductDetails[];
+    // On a category or search page: the products shown, in their order.
+    itemList?: ItemList;
+}
+
+// A clicked product card; on a category or search page `itemList` holds the list it was clicked in.
+interface ProductClickData extends EventsHandlerData<EventName> {
+    currency: string;
+    products?: ProductDetails[];
+    itemList?: ItemList;
+}
+
+interface ItemList {
+    id: string;
+    name: string;
+    products: ProductDetails[];
 }
 
 // Cart lines whose quantity the cart confirmed as changed; `quantity` is the changed amount.
@@ -86,10 +112,13 @@ interface GtagItem {
     item_variant?: string;
     price?: number;
     quantity: number;
+    index?: number;
 }
 
-type CartEventName = 'add_to_cart' | 'remove_from_cart';
+type ItemsEventName = 'add_to_cart' | 'remove_from_cart' | 'view_item' | 'view_item_list' | 'select_item';
 
+const PAGE_PRODUCT_DETAIL = 'PDP';
+const PAGE_CATALOG = 'CATALOG';
 const CENTS_IN_CURRENCY_UNIT = 100;
 const PRICE_DECIMALS = 2;
 
@@ -133,15 +162,76 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         handlers.CHANGE_CART_QUANTITY = [this.cartQuantityChangeHandler];
         handlers.CART_ITEMS_CHANGE = [this.cartItemsChangeHandler];
 
+        const pageLoadHandlers: TraceableEventHandler[] = [];
+
+        if (this.isEventEnabled('view_item')) {
+            pageLoadHandlers.push(this.viewItemHandler);
+        }
+
+        if (this.isEventEnabled('view_item_list')) {
+            pageLoadHandlers.push(this.viewItemListHandler);
+        }
+
+        handlers.PAGE_LOAD = pageLoadHandlers;
+
+        if (this.isEventEnabled('select_item')) {
+            handlers.PRODUCT_CLICK = [this.selectItemHandler];
+        }
+
         return handlers;
     }
 
+    protected viewItemHandler(data: PageLoadData): void {
+        const viewedProduct = data.products?.[0];
+
+        if (data.page !== PAGE_PRODUCT_DETAIL || !viewedProduct) {
+            return;
+        }
+
+        this.sendItemsEvent('view_item', data.currency, [{ ...viewedProduct, quantity: 1 }]);
+    }
+
+    // A list without products sends nothing: GA4 requires items, and such a list view could never lead to a product.
+    protected viewItemListHandler(data: PageLoadData): void {
+        const itemList = data.itemList;
+
+        if (data.page !== PAGE_CATALOG || !itemList?.products?.length) {
+            return;
+        }
+
+        this.sendItemsEvent('view_item_list', data.currency, itemList.products, {
+            item_list_id: itemList.id,
+            item_list_name: itemList.name,
+        });
+    }
+
+    // Reported only for clicks in the list view_item_list reported, so index and list match it; product cards elsewhere are not a tracked list.
+    protected selectItemHandler(data: ProductClickData): void {
+        const itemList = data.itemList;
+        const clickedSku = data.products?.[0]?.sku;
+
+        if (data.page !== PAGE_CATALOG || !itemList || !clickedSku) {
+            return;
+        }
+
+        const listedProduct = itemList.products.find((product) => String(product.sku) === String(clickedSku));
+
+        if (!listedProduct) {
+            return;
+        }
+
+        this.sendItemsEvent('select_item', data.currency, [{ ...listedProduct, quantity: 1 }], {
+            item_list_id: itemList.id,
+            item_list_name: itemList.name,
+        });
+    }
+
     protected addToCartHandler(data: CartEventData): void {
-        this.sendCartEvent('add_to_cart', data.currency, data.products ?? []);
+        this.sendItemsEvent('add_to_cart', data.currency, data.products ?? []);
     }
 
     protected removeFromCartHandler(data: CartEventData): void {
-        this.sendCartEvent('remove_from_cart', data.currency, data.products ?? []);
+        this.sendItemsEvent('remove_from_cart', data.currency, data.products ?? []);
     }
 
     protected cartQuantityChangeHandler(data: CartEventData): void {
@@ -160,7 +250,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             return;
         }
 
-        let eventName: CartEventName = 'remove_from_cart';
+        let eventName: ItemsEventName = 'remove_from_cart';
 
         if (quantityDifference > 0) {
             eventName = 'add_to_cart';
@@ -172,29 +262,34 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
 
         const differenceProduct = { ...changedProduct, quantity: Math.abs(quantityDifference) };
 
-        this.sendCartEvent(eventName, data.currency, [differenceProduct]);
+        this.sendItemsEvent(eventName, data.currency, [differenceProduct]);
     }
 
     protected cartItemsChangeHandler(data: CartItemsChangeData): void {
         const { increased, decreased } = data.eventDetail;
 
         if (this.isEventEnabled('add_to_cart')) {
-            this.sendCartEvent('add_to_cart', data.currency, increased);
+            this.sendItemsEvent('add_to_cart', data.currency, increased);
         }
 
         if (this.isEventEnabled('remove_from_cart')) {
-            this.sendCartEvent('remove_from_cart', data.currency, decreased);
+            this.sendItemsEvent('remove_from_cart', data.currency, decreased);
         }
     }
 
-    protected sendCartEvent(eventName: CartEventName, currency: string, products: ProductDetails[]): void {
+    protected sendItemsEvent(
+        eventName: ItemsEventName,
+        currency: string,
+        products: ProductDetails[],
+        additionalParams: Record<string, unknown> = {},
+    ): void {
         const items = this.getItems(products);
 
         if (!items.length) {
             return;
         }
 
-        const eventParams: Record<string, unknown> = { currency, items };
+        const eventParams: Record<string, unknown> = { ...additionalParams, currency, items };
         const value = this.getItemsValue(items);
 
         // Without a price for every item (e.g. a guest who may not see prices) the value is left out, the event is still sent.
@@ -229,6 +324,10 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             // item_name is never empty: a trigger without the product name (e.g. the quick-add form) sends the SKU instead.
             const item: GtagItem = { item_id: itemId, item_name: itemId, quantity };
             const price = this.getPrice(product.price);
+
+            if (typeof product.index === 'number') {
+                item.index = product.index;
+            }
 
             if (product.name) {
                 item.item_name = String(product.name);
