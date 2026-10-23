@@ -56,7 +56,7 @@ interface ProductDetails {
     name?: string;
     brand?: string;
     variant?: string;
-    // Only the PDP sends them: the assigned category first, followed by its parents. Cart lines carry no categories.
+    // Only the PDP sends them: the categories its breadcrumb shows, top level first. Cart lines carry no categories.
     categories?: ProductCategory[];
     price?: number;
     quantity?: number;
@@ -66,9 +66,7 @@ interface ProductDetails {
 }
 
 interface ProductCategory {
-    id: number;
     name: string;
-    parentIds?: number[];
 }
 
 interface CartEventData extends EventsHandlerData<EventName> {
@@ -361,31 +359,13 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         return Array.from(itemsBySku.values());
     }
 
+    // The categories arrive top level first, e.g. Computer > Pc's/Workstations; GA4 has at most five levels.
     protected addCategoryLevels(item: GtagItem, categories: ProductCategory[]): void {
-        const categoryPath = this.getCategoryPath(categories);
+        const levelCount = Math.min(categories.length, CATEGORY_LEVEL_KEYS.length);
 
-        for (let level = 0; level < categoryPath.length; level++) {
-            item[CATEGORY_LEVEL_KEYS[level]] = categoryPath[level].name;
+        for (let level = 0; level < levelCount; level++) {
+            item[CATEGORY_LEVEL_KEYS[level]] = categories[level].name;
         }
-    }
-
-    // The assigned category and its parents, top-level first, e.g. Computer > Pc's/Workstations; at most the five levels GA4 has.
-    protected getCategoryPath(categories: ProductCategory[]): ProductCategory[] {
-        const categoryPath: ProductCategory[] = [];
-        let category = categories[0];
-
-        while (category && categoryPath.length < CATEGORY_LEVEL_KEYS.length) {
-            categoryPath.unshift(category);
-            category = this.findParentCategory(category, categories);
-        }
-
-        return categoryPath;
-    }
-
-    protected findParentCategory(category: ProductCategory, categories: ProductCategory[]): ProductCategory | undefined {
-        const parentIds = category.parentIds ?? [];
-
-        return categories.find((candidate) => parentIds.includes(candidate.id));
     }
 
     protected getItemsValue(items: GtagItem[]): number | undefined {
