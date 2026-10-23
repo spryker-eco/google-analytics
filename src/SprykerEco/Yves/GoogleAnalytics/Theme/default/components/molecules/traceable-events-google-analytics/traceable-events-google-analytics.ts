@@ -56,13 +56,19 @@ interface ProductDetails {
     name?: string;
     brand?: string;
     variant?: string;
-    // Only the PDP sends it: the category the product is assigned to. Cart lines carry no category.
-    category?: string;
+    // Only the PDP sends them: the assigned category first, followed by its parents. Cart lines carry no categories.
+    categories?: ProductCategory[];
     price?: number;
     quantity?: number;
     newQuantity?: number;
     // The position in a product list, from 0.
     index?: number;
+}
+
+interface ProductCategory {
+    id: number;
+    name: string;
+    parentIds?: number[];
 }
 
 interface CartEventData extends EventsHandlerData<EventName> {
@@ -105,6 +111,10 @@ interface GtagItem {
     item_name: string;
     item_brand?: string;
     item_category?: string;
+    item_category2?: string;
+    item_category3?: string;
+    item_category4?: string;
+    item_category5?: string;
     item_variant?: string;
     price?: number;
     quantity: number;
@@ -116,6 +126,8 @@ type ItemsEventName = 'add_to_cart' | 'remove_from_cart' | 'view_item' | 'view_i
 const PAGE_PRODUCT_DETAIL = 'PDP';
 const PAGE_CATALOG = 'CATALOG';
 const CENTS_IN_CURRENCY_UNIT = 100;
+// GA4 item category levels, from the top-level category down.
+const CATEGORY_LEVEL_KEYS = ['item_category', 'item_category2', 'item_category3', 'item_category4', 'item_category5'] as const;
 const PRICE_DECIMALS = 2;
 
 export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAdapter {
@@ -337,9 +349,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
                 item.item_variant = String(product.variant);
             }
 
-            if (product.category) {
-                item.item_category = String(product.category);
-            }
+            this.addCategoryLevels(item, product.categories ?? []);
 
             if (price !== undefined) {
                 item.price = price;
@@ -349,6 +359,33 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         }
 
         return Array.from(itemsBySku.values());
+    }
+
+    protected addCategoryLevels(item: GtagItem, categories: ProductCategory[]): void {
+        const categoryPath = this.getCategoryPath(categories);
+
+        for (let level = 0; level < categoryPath.length; level++) {
+            item[CATEGORY_LEVEL_KEYS[level]] = categoryPath[level].name;
+        }
+    }
+
+    // The assigned category and its parents, top-level first, e.g. Computer > Pc's/Workstations; at most the five levels GA4 has.
+    protected getCategoryPath(categories: ProductCategory[]): ProductCategory[] {
+        const categoryPath: ProductCategory[] = [];
+        let category = categories[0];
+
+        while (category && categoryPath.length < CATEGORY_LEVEL_KEYS.length) {
+            categoryPath.unshift(category);
+            category = this.findParentCategory(category, categories);
+        }
+
+        return categoryPath;
+    }
+
+    protected findParentCategory(category: ProductCategory, categories: ProductCategory[]): ProductCategory | undefined {
+        const parentIds = category.parentIds ?? [];
+
+        return categories.find((candidate) => parentIds.includes(candidate.id));
     }
 
     protected getItemsValue(items: GtagItem[]): number | undefined {
