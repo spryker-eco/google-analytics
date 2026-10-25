@@ -40,7 +40,16 @@
         : {},
     'traceable-adapter': true,
     'data-gtag-script-src': "https://www.googletagmanager.com/gtag/js?id=#{data.gtagId}",
+    'price-precision': constant('Spryker\\Shared\\Money\\Converter\\IntegerToDecimalConverter::PRICE_PRECISION'),
+    'gtag-event-timeout': 300,
+    'reported-transactions-limit': 20,
 } %}
+
+{#
+    price-precision - storefront prices are integers of this many parts per currency unit, as Money stores them.
+    gtag-event-timeout - milliseconds gtag waits for Google Analytics before it reports an event as handled; a page about to navigate waits no longer.
+    reported-transactions-limit - how many order references are remembered, so reloading the success page does not report an order again.
+#}
 
 {% block component %}
     {% if shouldRender %}

@@ -40,3 +40,7 @@ Search,Suche
 "A category or search results page with products is shown. GA4 event: view_item_list.","Eine Kategorie- oder Suchergebnisseite mit Produkten wird angezeigt. GA4-Ereignis: view_item_list."
 "Product Click","Produktklick"
 "A product is clicked in a category or search results list. GA4 event: select_item.","Ein Produkt wird in einer Kategorie- oder Suchergebnisliste angeklickt. GA4-Ereignis: select_item."
+"Add to Wishlist","Zur Wunschliste hinzufügen"
+"A product is added to a wishlist on the product detail page. GA4 event: add_to_wishlist.","Ein Produkt wird auf der Produktdetailseite zu einer Wunschliste hinzugefügt. GA4-Ereignis: add_to_wishlist."
+Purchase,Kauf
+"An order is placed; reported once per order. GA4 event: purchase.","Eine Bestellung wird aufgegeben; einmal pro Bestellung gemeldet. GA4-Ereignis: purchase."

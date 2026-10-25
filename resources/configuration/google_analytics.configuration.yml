@@ -129,6 +129,18 @@ features:
                         scopes:
                             - global
                             - store
+                      - key: add_to_wishlist_event_enabled
+                        name: Add to Wishlist
+                        description: 'A product is added to a wishlist on the product detail page. GA4 event: add_to_wishlist.'
+                        type: boolean
+                        default_value: false
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 9
+                        scopes:
+                            - global
+                            - store
                       - key: search_event_enabled
                         name: Search
                         description: 'Storefront search is performed. GA4 events: search_results, zero_search_results.'
@@ -174,6 +186,18 @@ features:
                         secret: false
                         storefront: true
                         order: 5
+                        scopes:
+                            - global
+                            - store
+                      - key: purchase_event_enabled
+                        name: Purchase
+                        description: 'An order is placed; reported once per order. GA4 event: purchase.'
+                        type: boolean
+                        default_value: false
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 10
                         scopes:
                             - global
                             - store
