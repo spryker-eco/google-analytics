@@ -535,19 +535,13 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         return Number(value.toFixed(this.priceDecimals));
     }
 
-    // Storefront prices come in cents; a fractional price is already in currency units, as some triggers read it from the page.
+    // Storefront emitters send prices in cents; the price-precision attribute holds the parts per currency unit.
     protected getPrice(price: unknown): number | undefined {
         if (typeof price !== 'number') {
             return undefined;
         }
 
-        let currencyUnitPrice = price;
-
-        if (Number.isInteger(price)) {
-            currencyUnitPrice = price / this.pricePrecision;
-        }
-
-        return Number(currencyUnitPrice.toFixed(this.priceDecimals));
+        return Number((price / this.pricePrecision).toFixed(this.priceDecimals));
     }
 
     protected searchEventHandler(data: SearchEventData): void {
