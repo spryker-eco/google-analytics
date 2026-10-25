@@ -254,7 +254,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     }
 
     // Reported only for clicks in a tracked list, so list and index match view_item_list; other product cards are not a list.
-    protected selectItemHandler(data: ProductClickData): Promise<void> | void {
+    protected selectItemHandler(data: ProductClickData): void {
         const clickedProduct = data.products?.[0];
 
         if (!clickedProduct?.sku || !clickedProduct.itemListId) {
@@ -266,7 +266,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             name: clickedProduct.itemListName ?? clickedProduct.itemListId,
         };
 
-        return this.sendItemListEvent('select_item', data.currency, itemList, [{ ...clickedProduct, quantity: 1 }]);
+        this.sendItemListEvent('select_item', data.currency, itemList, [{ ...clickedProduct, quantity: 1 }]);
     }
 
     protected sendItemListEvent(
@@ -274,22 +274,22 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         currency: string,
         itemList: Pick<ItemList, 'id' | 'name'>,
         products: ProductDetails[],
-    ): Promise<void> {
-        return this.sendItemsEvent(eventName, currency, products, {
+    ): void {
+        this.sendItemsEvent(eventName, currency, products, {
             item_list_id: itemList.id,
             item_list_name: itemList.name,
         });
     }
 
     // The product page holds the viewed product in its page data; the wishlist adds one piece of it.
-    protected addToWishlistHandler(data: PageLoadData): Promise<void> | void {
+    protected addToWishlistHandler(data: PageLoadData): void {
         const wishedProduct = data.products?.[0];
 
         if (data.page !== PAGE_PRODUCT_DETAIL || !wishedProduct) {
             return;
         }
 
-        return this.sendItemsEvent('add_to_wishlist', data.currency, [{ ...wishedProduct, quantity: 1 }]);
+        this.sendItemsEvent('add_to_wishlist', data.currency, [{ ...wishedProduct, quantity: 1 }]);
     }
 
     protected purchaseHandler(data: PageLoadData): void {
@@ -351,15 +351,15 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         }
     }
 
-    protected addToCartHandler(data: CartEventData): Promise<void> {
-        return this.sendItemsEvent('add_to_cart', data.currency, data.products ?? []);
+    protected addToCartHandler(data: CartEventData): void {
+        this.sendItemsEvent('add_to_cart', data.currency, data.products ?? []);
     }
 
-    protected removeFromCartHandler(data: CartEventData): Promise<void> {
-        return this.sendItemsEvent('remove_from_cart', data.currency, data.products ?? []);
+    protected removeFromCartHandler(data: CartEventData): void {
+        this.sendItemsEvent('remove_from_cart', data.currency, data.products ?? []);
     }
 
-    protected cartQuantityChangeHandler(data: CartEventData): Promise<void> | void {
+    protected cartQuantityChangeHandler(data: CartEventData): void {
         const changedProduct = data.products?.[0];
         // Without the new quantity (null when the trigger finds no quantity input) the change is unknown, not a removal.
         const isNewQuantityKnown = changedProduct?.newQuantity !== null && changedProduct?.newQuantity !== undefined;
@@ -387,7 +387,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
 
         const differenceProduct = { ...changedProduct, quantity: Math.abs(quantityDifference) };
 
-        return this.sendItemsEvent(eventName, data.currency, [differenceProduct]);
+        this.sendItemsEvent(eventName, data.currency, [differenceProduct]);
     }
 
     protected cartItemsChangeHandler(data: CartItemsChangeData): void {
@@ -409,11 +409,11 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         currency: string,
         products: ProductDetails[],
         additionalParams: Record<string, unknown> = {},
-    ): Promise<void> {
+    ): void {
         const items = this.getItems(products);
 
         if (!items.length) {
-            return Promise.resolve();
+            return;
         }
 
         const eventParams: Record<string, unknown> = { ...additionalParams, currency, items };
@@ -425,21 +425,8 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             eventParams.value = value;
         }
 
-        // Resolves once Google Analytics has handled the event, so a page that is about to navigate can wait for it.
-        // gtag honors event_timeout only once the Google Analytics library has loaded; when a blocker keeps the stub,
-        // event_callback never fires, so the same deadline is kept here too and the promise settles either way.
-        return new Promise((resolve) => {
-            const fallbackTimer = window.setTimeout(resolve, this.gtagEventTimeout);
-
-            window.gtag('event', eventName, {
-                ...eventParams,
-                event_callback: () => {
-                    window.clearTimeout(fallbackTimer);
-                    resolve();
-                },
-                event_timeout: this.gtagEventTimeout,
-            });
-        });
+        // Sent without waiting: gtag delivers it even when the page navigates right after, e.g. a submitted add-to-cart form.
+        window.gtag('event', eventName, eventParams);
     }
 
     // One entry per product and variant: lines of the same product and variant are added up, so an item is never sent twice.
@@ -577,10 +564,6 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     // The decimals a price in currency units has, e.g. 2 for a precision of 100.
     protected get priceDecimals(): number {
         return Math.round(Math.log10(this.pricePrecision));
-    }
-
-    protected get gtagEventTimeout(): number {
-        return Number(this.getAttribute('gtag-event-timeout'));
     }
 
     protected get reportedTransactionsLimit(): number {
