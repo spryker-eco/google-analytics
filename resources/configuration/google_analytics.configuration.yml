@@ -155,12 +155,12 @@ features:
                             - store
                 - key: cart_events
                   name: Cart Events
-                  description: Product discovery and interaction events.
+                  description: Shopping cart and purchase events.
                   section: event_tracking
                   toggle_all: true
                   layout: compact
                   enabled: true
-                  order: 2
+                  order: 3
                   scopes:
                       - global
                       - store

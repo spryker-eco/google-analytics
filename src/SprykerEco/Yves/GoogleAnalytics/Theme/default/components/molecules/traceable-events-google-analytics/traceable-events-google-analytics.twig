@@ -29,23 +29,6 @@
     {% endif %}
 {% endfor %}
 
-{# Event settings are named `<event>_event_ebabled`, e.g. `search_event_ebabled`. #}
-{% set eventSettingSuffix = '_event_ebabled' %}
-
-{# Maps every event setting to its on/off state by event name, e.g. { search: true }; other settings of the tab never reach the page. #}
-{% set enabledEvents = {} %}
-{% for settingKey, settingValue in configurationValues('integrations:google_analytics') %}
-    {% set settingName = settingKey | split(':') | last %}
-    {% set isEventSetting = settingName ends with eventSettingSuffix %}
-    {% set eventName = settingName | slice(0, settingName | length - eventSettingSuffix | length) %}
-    {# The stored value arrives as the string 'true'/'false'. Compared strictly, because 'false' == true in PHP. #}
-    {% set isEventEnabled = settingValue is same as(true) or settingValue is same as('true') %}
-
-    {% if isEventSetting %}
-        {% set enabledEvents = enabledEvents | merge({ (eventName): isEventEnabled }) %}
-    {% endif %}
-{% endfor %}
-
 {% define attributes = {
     initial: shouldRender
         ? {

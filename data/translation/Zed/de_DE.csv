@@ -30,7 +30,8 @@ Locale,Sprachraum
 "Product discovery and interaction events.","Ereignisse zur Produktsuche und Produktinteraktion."
 Search,Suche
 "Storefront search is performed. GA4 events: search_results, zero_search_results.","Im Shop wird eine Suche ausgeführt. GA4-Ereignisse: search_results, zero_search_results."
-"Storefront search is performed. GA4 events: search_results, zero_search_results.","Im Shop wird eine Suche ausgeführt. GA4-Ereignisse: search_results, zero_search_results."
+"Cart Events",Warenkorbereignisse
+"Shopping cart and purchase events.","Warenkorb- und Kaufereignisse."
 "Add to Cart","In den Warenkorb"
 "A product is added to the cart, or a cart item quantity is raised. GA4 event: add_to_cart.","Ein Produkt wird in den Warenkorb gelegt oder die Menge einer Warenkorbposition erhöht. GA4-Ereignis: add_to_cart."
 "Remove from Cart","Aus dem Warenkorb entfernen"

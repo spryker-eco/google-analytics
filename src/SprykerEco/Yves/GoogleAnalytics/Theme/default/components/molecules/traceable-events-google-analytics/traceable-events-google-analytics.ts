@@ -391,7 +391,9 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     }
 
     protected cartItemsChangeHandler(data: CartItemsChangeData): void {
-        const { increased, decreased } = data.eventDetail;
+        // The cart tracker sends both arrays; a custom dispatcher may send only one, which must not break the other.
+        const increased = data.eventDetail?.increased ?? [];
+        const decreased = data.eventDetail?.decreased ?? [];
 
         if (this.isEventEnabled('add_to_cart')) {
             this.sendItemsEvent('add_to_cart', data.currency, increased);
@@ -424,10 +426,17 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         }
 
         // Resolves once Google Analytics has handled the event, so a page that is about to navigate can wait for it.
+        // gtag honors event_timeout only once the Google Analytics library has loaded; when a blocker keeps the stub,
+        // event_callback never fires, so the same deadline is kept here too and the promise settles either way.
         return new Promise((resolve) => {
+            const fallbackTimer = window.setTimeout(resolve, this.gtagEventTimeout);
+
             window.gtag('event', eventName, {
                 ...eventParams,
-                event_callback: () => resolve(),
+                event_callback: () => {
+                    window.clearTimeout(fallbackTimer);
+                    resolve();
+                },
                 event_timeout: this.gtagEventTimeout,
             });
         });
