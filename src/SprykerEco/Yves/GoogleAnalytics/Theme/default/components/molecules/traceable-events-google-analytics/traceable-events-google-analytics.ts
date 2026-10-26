@@ -24,6 +24,8 @@ declare global {
     interface Window {
         dataLayer: unknown[];
         gtag: GtagFunction;
+        // Set by the gtag-script head tag's onerror, which fires before this component mounts and can listen.
+        isGtagScriptFailed?: boolean;
     }
 }
 
@@ -172,6 +174,10 @@ const CATEGORY_LEVEL_KEYS = [
 export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAdapter {
     protected currentStore = '';
     protected currentLocale = '';
+    // Settlers of events still waiting for Google Analytics; all run at once when the gtag script fails to load.
+    protected pendingEventSettlers = new Set<() => void>();
+    protected isGtagScriptFailed = false;
+    protected isGtagScriptWatched = false;
 
     override init(): void {
         const { appId, store, locale } = this.initialData;
@@ -254,7 +260,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     }
 
     // Reported only for clicks in a tracked list, so list and index match view_item_list; other product cards are not a list.
-    protected selectItemHandler(data: ProductClickData): void {
+    protected selectItemHandler(data: ProductClickData): Promise<void> | void {
         const clickedProduct = data.products?.[0];
 
         if (!clickedProduct?.sku || !clickedProduct.itemListId) {
@@ -266,7 +272,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             name: clickedProduct.itemListName ?? clickedProduct.itemListId,
         };
 
-        this.sendItemListEvent('select_item', data.currency, itemList, [{ ...clickedProduct, quantity: 1 }]);
+        return this.sendItemListEvent('select_item', data.currency, itemList, [{ ...clickedProduct, quantity: 1 }]);
     }
 
     protected sendItemListEvent(
@@ -274,22 +280,22 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         currency: string,
         itemList: Pick<ItemList, 'id' | 'name'>,
         products: ProductDetails[],
-    ): void {
-        this.sendItemsEvent(eventName, currency, products, {
+    ): Promise<void> {
+        return this.sendItemsEvent(eventName, currency, products, {
             item_list_id: itemList.id,
             item_list_name: itemList.name,
         });
     }
 
     // The product page holds the viewed product in its page data; the wishlist adds one piece of it.
-    protected addToWishlistHandler(data: PageLoadData): void {
+    protected addToWishlistHandler(data: PageLoadData): Promise<void> | void {
         const wishedProduct = data.products?.[0];
 
         if (data.page !== PAGE_PRODUCT_DETAIL || !wishedProduct) {
             return;
         }
 
-        this.sendItemsEvent('add_to_wishlist', data.currency, [{ ...wishedProduct, quantity: 1 }]);
+        return this.sendItemsEvent('add_to_wishlist', data.currency, [{ ...wishedProduct, quantity: 1 }]);
     }
 
     protected purchaseHandler(data: PageLoadData): void {
@@ -351,15 +357,15 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         }
     }
 
-    protected addToCartHandler(data: CartEventData): void {
-        this.sendItemsEvent('add_to_cart', data.currency, data.products ?? []);
+    protected addToCartHandler(data: CartEventData): Promise<void> {
+        return this.sendItemsEvent('add_to_cart', data.currency, data.products ?? []);
     }
 
-    protected removeFromCartHandler(data: CartEventData): void {
-        this.sendItemsEvent('remove_from_cart', data.currency, data.products ?? []);
+    protected removeFromCartHandler(data: CartEventData): Promise<void> {
+        return this.sendItemsEvent('remove_from_cart', data.currency, data.products ?? []);
     }
 
-    protected cartQuantityChangeHandler(data: CartEventData): void {
+    protected cartQuantityChangeHandler(data: CartEventData): Promise<void> | void {
         const changedProduct = data.products?.[0];
         // Without the new quantity (null when the trigger finds no quantity input) the change is unknown, not a removal.
         const isNewQuantityKnown = changedProduct?.newQuantity !== null && changedProduct?.newQuantity !== undefined;
@@ -387,7 +393,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
 
         const differenceProduct = { ...changedProduct, quantity: Math.abs(quantityDifference) };
 
-        this.sendItemsEvent(eventName, data.currency, [differenceProduct]);
+        return this.sendItemsEvent(eventName, data.currency, [differenceProduct]);
     }
 
     protected cartItemsChangeHandler(data: CartItemsChangeData): void {
@@ -409,11 +415,11 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         currency: string,
         products: ProductDetails[],
         additionalParams: Record<string, unknown> = {},
-    ): void {
+    ): Promise<void> {
         const items = this.getItems(products);
 
         if (!items.length) {
-            return;
+            return Promise.resolve();
         }
 
         const eventParams: Record<string, unknown> = { ...additionalParams, currency, items };
@@ -425,8 +431,67 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             eventParams.value = value;
         }
 
-        // Sent without waiting: gtag delivers it even when the page navigates right after, e.g. a submitted add-to-cart form.
-        window.gtag('event', eventName, eventParams);
+        // Resolves once Google Analytics has handled the event, so a page that is about to navigate can wait for it.
+        // The deadline is long enough for a cold load of the Google Analytics script, which must arrive before it can
+        // confirm anything; a script that failed to load (e.g. a content blocker) can never confirm, so those events
+        // settle immediately and no navigation waits out the deadline for nothing.
+        return new Promise((resolve) => {
+            this.watchGtagScriptFailure();
+
+            if (this.isGtagScriptFailed) {
+                window.gtag('event', eventName, eventParams);
+                resolve();
+
+                return;
+            }
+
+            const settle = (): void => {
+                window.clearTimeout(fallbackTimer);
+                this.pendingEventSettlers.delete(settle);
+                resolve();
+            };
+            const fallbackTimer = window.setTimeout(settle, this.gtagEventTimeout);
+
+            this.pendingEventSettlers.add(settle);
+
+            window.gtag('event', eventName, {
+                ...eventParams,
+                event_callback: settle,
+                event_timeout: this.gtagEventTimeout,
+            });
+        });
+    }
+
+    // The script-loader next to this component injects the gtag script after the components mount, so the element is looked up when the first event needs it.
+    protected watchGtagScriptFailure(): void {
+        // A script rendered in the page head fails before this component mounts; its onerror leaves the global flag.
+        if (window.isGtagScriptFailed) {
+            this.isGtagScriptFailed = true;
+        }
+
+        if (this.isGtagScriptWatched) {
+            return;
+        }
+
+        const script = document.querySelector<HTMLScriptElement>(`script[src="${this.gtagScriptSrc}"]`);
+
+        if (!script) {
+            return;
+        }
+
+        this.isGtagScriptWatched = true;
+
+        script.addEventListener(
+            'error',
+            () => {
+                this.isGtagScriptFailed = true;
+
+                for (const settle of this.pendingEventSettlers) {
+                    settle();
+                }
+            },
+            { once: true },
+        );
     }
 
     // One entry per product and variant: lines of the same product and variant are added up, so an item is never sent twice.
@@ -564,6 +629,14 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     // The decimals a price in currency units has, e.g. 2 for a precision of 100.
     protected get priceDecimals(): number {
         return Math.round(Math.log10(this.pricePrecision));
+    }
+
+    protected get gtagEventTimeout(): number {
+        return Number(this.getAttribute('gtag-event-timeout'));
+    }
+
+    protected get gtagScriptSrc(): string {
+        return this.getAttribute('data-gtag-script-src');
     }
 
     protected get reportedTransactionsLimit(): number {
