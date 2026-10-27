@@ -62,7 +62,8 @@ interface ProductDetails {
     abstractSku?: string;
     name?: string;
     brand?: string;
-    variant?: string;
+    // The values of the attributes the variants of the product differ in, ordered by attribute key, e.g. ['Red', '64 GB'].
+    variant?: string[];
     // One category path of the product, top level first, picked by the same rule on the product page and in the cart.
     categories?: ProductCategory[];
     price?: number;
@@ -158,6 +159,9 @@ type ItemsEventName =
 
 const PAGE_PRODUCT_DETAIL = 'PDP';
 const PAGE_CHECKOUT_SUCCESS = 'CHECKOUT_SUCCESS';
+
+// GA4 reports a variant as one string, e.g. "Red / 64 GB".
+const VARIANT_VALUE_SEPARATOR = ' / ';
 // Order references already reported, so reloading or returning to the success page does not report an order again.
 const REPORTED_TRANSACTIONS_STORAGE_KEY = 'ga4-reported-transaction-ids';
 // List events describe what was shown, not a purchase intent, so a summed value of their products would mislead reports.
@@ -510,7 +514,8 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
 
             // A trigger without the abstract product SKU, e.g. the quick-add form, falls back to the SKU it has.
             const itemId = String(product.abstractSku || product.sku);
-            const itemKey = `${itemId}|${product.variant ?? ''}`;
+            const variant = this.getVariant(product.variant);
+            const itemKey = `${itemId}|${variant}`;
             const sameItem = itemsByKey.get(itemKey);
 
             if (sameItem) {
@@ -537,8 +542,8 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
                 item.item_brand = String(product.brand);
             }
 
-            if (product.variant) {
-                item.item_variant = String(product.variant);
+            if (variant) {
+                item.item_variant = variant;
             }
 
             this.addCategoryLevels(item, product.categories ?? []);
@@ -554,6 +559,10 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     }
 
     // The categories arrive top level first, e.g. Computer > Pc's/Workstations; GA4 has at most five levels.
+    protected getVariant(variantValues: string[] | undefined): string {
+        return (variantValues ?? []).map(String).join(VARIANT_VALUE_SEPARATOR);
+    }
+
     protected addCategoryLevels(item: GtagItem, categories: ProductCategory[]): void {
         const levelCount = Math.min(categories.length, CATEGORY_LEVEL_KEYS.length);
 
