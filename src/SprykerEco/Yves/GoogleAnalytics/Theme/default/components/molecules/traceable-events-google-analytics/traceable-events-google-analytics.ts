@@ -24,7 +24,8 @@ declare global {
     interface Window {
         dataLayer: unknown[];
         gtag: GtagFunction;
-        // Set by the gtag-script head tag's onerror, which fires before this component mounts and can listen.
+        // Set by the gtag-script head tag's onload and onerror, which fire before this component mounts and can listen.
+        isGtagScriptLoaded?: boolean;
         isGtagScriptFailed?: boolean;
     }
 }
@@ -180,6 +181,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     protected currentLocale = '';
     // Settlers of events still waiting for Google Analytics; all run at once when the gtag script fails to load.
     protected pendingEventSettlers = new Set<() => void>();
+    protected isGtagScriptLoaded = false;
     protected isGtagScriptFailed = false;
     protected isGtagScriptWatched = false;
 
@@ -435,14 +437,14 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             eventParams.value = value;
         }
 
-        // Resolves once Google Analytics has handled the event, so a page that is about to navigate can wait for it.
-        // The deadline is long enough for a cold load of the Google Analytics script, which must arrive before it can
-        // confirm anything; a script that failed to load (e.g. a content blocker) can never confirm, so those events
-        // settle immediately and no navigation waits out the deadline for nothing.
+        // Settles at once when nothing is gained by waiting: a loaded script sends the event with a keepalive request,
+        // which outlives a navigation, and a script that failed to load (e.g. a content blocker) can never send it.
+        // Only an event raised while the script is still loading sits in the data layer, which a navigation drops, so
+        // that one resolves once Google Analytics has handled it, so a page that is about to navigate can wait for it.
         return new Promise((resolve) => {
-            this.watchGtagScriptFailure();
+            this.watchGtagScriptState();
 
-            if (this.isGtagScriptFailed) {
+            if (this.isGtagScriptLoaded || this.isGtagScriptFailed) {
                 window.gtag('event', eventName, eventParams);
                 resolve();
 
@@ -467,8 +469,12 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     }
 
     // The script-loader next to this component injects the gtag script after the components mount, so the element is looked up when the first event needs it.
-    protected watchGtagScriptFailure(): void {
-        // A script rendered in the page head fails before this component mounts; its onerror leaves the global flag.
+    protected watchGtagScriptState(): void {
+        // A script rendered in the page head loads or fails before this component mounts; its onload or onerror leaves the global flag.
+        if (window.isGtagScriptLoaded) {
+            this.isGtagScriptLoaded = true;
+        }
+
         if (window.isGtagScriptFailed) {
             this.isGtagScriptFailed = true;
         }
@@ -484,6 +490,14 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         }
 
         this.isGtagScriptWatched = true;
+
+        script.addEventListener(
+            'load',
+            () => {
+                this.isGtagScriptLoaded = true;
+            },
+            { once: true },
+        );
 
         script.addEventListener(
             'error',

@@ -1,9 +1,9 @@
 {# Loaded from the page head, so the script starts with the first bytes of the page and is usually ready before the first tracked click. #}
 {# A custom element is not allowed inside <head>, so this is plain markup, not a component; the traceable-events-google-analytics component finds this script tag by its src and does not inject a second one, so the URL must match its data-gtag-script-src attribute. #}
-{# The onerror flag records a failed load (e.g. a content blocker) for the component, which mounts too late to observe the error event itself. #}
+{# The onload and onerror flags record the outcome for the component, which mounts too late to observe these events itself. #}
 
 {% set gtagId = data.gtagId | default(null) %}
 
 {% if gtagId is not empty %}
-    <script async src="https://www.googletagmanager.com/gtag/js?id={{ gtagId }}" onerror="window.isGtagScriptFailed = true"></script>
+    <script async src="https://www.googletagmanager.com/gtag/js?id={{ gtagId }}" onload="window.isGtagScriptLoaded = true" onerror="window.isGtagScriptFailed = true"></script>
 {% endif %}
