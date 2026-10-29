@@ -61,7 +61,12 @@ interface ProductDetails {
     sku: string;
     // The SKU of the abstract product, sent as item_id, so every step of the funnel reports a product under the same id; variants differ by item_variant.
     abstractSku?: string;
+    // The SKU of the concrete product, sent by a trigger whose `sku` may stand for something else, e.g. a product card of a product
+    // with several variants, which sends an empty one; without it, `sku` is concrete when it differs from the abstract product SKU.
+    concreteSku?: string;
+    // The product's own name, e.g. of a concrete product "Galaxy Tab A 32 GB", and the name of its abstract product; a variant may have a name of its own.
     name?: string;
+    abstractName?: string;
     brand?: string;
     // The values of the attributes the variants of the product differ in, ordered by attribute key, e.g. ['Red', '64 GB'].
     variant?: string[];
@@ -144,6 +149,9 @@ interface GtagItem {
     item_category4?: string;
     item_category5?: string;
     item_variant?: string;
+    // A custom item parameter: the SKU of the concrete product, where the event knows it, e.g. in the cart; a product list card of a product
+    // with several variants has none. Merchants register it as an item-scoped custom dimension to report by concrete product.
+    concrete_sku?: string;
     price?: number;
     quantity: number;
     index?: number;
@@ -293,11 +301,12 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         });
     }
 
-    // The product page holds the viewed product in its page data; the wishlist adds one piece of it.
+    // The wishlist adds one piece of the product: on the product page the viewed product from its page data,
+    // elsewhere, e.g. a discontinued wishlist item's alternative, the product the clicked button sends.
     protected addToWishlistHandler(data: PageLoadData): Promise<void> | void {
         const wishedProduct = data.products?.[0];
 
-        if (data.page !== PAGE_PRODUCT_DETAIL || !wishedProduct) {
+        if (!wishedProduct?.sku) {
             return;
         }
 
@@ -526,10 +535,12 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
                 continue;
             }
 
-            // A trigger without the abstract product SKU, e.g. the quick-add form, falls back to the SKU it has.
-            const itemId = String(product.abstractSku || product.sku);
+            const abstractSku = String(product.abstractSku || '');
+            const concreteSku = this.getConcreteSku(product, abstractSku);
+            // A trigger without the abstract product SKU falls back to the SKU it has.
+            const itemId = abstractSku || String(product.sku);
             const variant = this.getVariant(product.variant);
-            const itemKey = `${itemId}|${variant}`;
+            const itemKey = `${itemId}|${concreteSku}|${variant}`;
             const sameItem = itemsByKey.get(itemKey);
 
             if (sameItem) {
@@ -538,8 +549,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
                 continue;
             }
 
-            // item_name is never empty: a trigger without the product name (e.g. the quick-add form) sends the SKU instead.
-            const item: GtagItem = { item_id: itemId, item_name: itemId, quantity };
+            const item: GtagItem = { item_id: itemId, item_name: this.getItemName(product, itemId), quantity };
             const price = this.getPrice(product.price);
 
             const index = this.getIndex(product.index);
@@ -548,16 +558,16 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
                 item.index = index;
             }
 
-            if (product.name) {
-                item.item_name = String(product.name);
-            }
-
             if (product.brand) {
                 item.item_brand = String(product.brand);
             }
 
             if (variant) {
                 item.item_variant = variant;
+            }
+
+            if (concreteSku) {
+                item.concrete_sku = concreteSku;
             }
 
             this.addCategoryLevels(item, product.categories ?? []);
@@ -594,6 +604,27 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         }
 
         return position;
+    }
+
+    protected getConcreteSku(product: ProductDetails, abstractSku: string): string {
+        if (product.concreteSku !== undefined) {
+            return String(product.concreteSku ?? '');
+        }
+
+        const sku = String(product.sku);
+
+        // Without the abstract product SKU, e.g. from a custom trigger, it is unknown which kind the SKU is.
+        if (!abstractSku) {
+            return '';
+        }
+
+        return sku === abstractSku ? '' : sku;
+    }
+
+    // The abstract product name, like the item ID, so a product keeps one name across the funnel whichever variant is shown.
+    // item_name is never empty: a trigger without a name sends the ID instead.
+    protected getItemName(product: ProductDetails, itemId: string): string {
+        return String(product.abstractName || product.name || itemId);
     }
 
     protected getItemsValue(items: GtagItem[]): number | undefined {

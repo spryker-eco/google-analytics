@@ -33,3 +33,26 @@ If Search tracking was enabled before the upgrade:
 - Date range presets (last 24 hours / 7 days / 30 days) with per-store and per-locale filtering
 - Paginated, sortable tables with minimum-count and keyword filtering
 - Reads data from GA4 using a service account — no manual CSV export required
+
+## Products in ecommerce events
+
+Every ecommerce event, from `view_item_list` to `purchase`, reports a product with the same item data, so GA4 joins the steps of the funnel and the item list attribution by item ID:
+
+| GA4 item field | Value |
+|---|---|
+| `item_id` | The abstract product SKU |
+| `item_name` | The abstract product name |
+| `item_variant` | The values of the attributes the variants of the product differ in, e.g. `Red / 64 GB`, where a variant is known |
+| `item_brand`, `item_category` … `item_category5` | The brand and the category path of the product, top level first |
+| `concrete_sku` | Custom item parameter: the concrete product SKU, where the event knows the concrete product, e.g. in the cart. A product list card and a product detail page without a selected variant of a product with several variants have none. |
+
+### Report by concrete product
+
+GA4 keeps custom item parameters only for item-scoped custom dimensions. To report by concrete product SKU, register `concrete_sku` once per GA4 property:
+
+1. In Google Analytics, open **Admin** > **Data display** > **Custom definitions**.
+2. Click **Create custom dimension**.
+3. Set **Dimension name** to `Concrete SKU`, **Scope** to `Item`, and **Item parameter** to `concrete_sku`.
+4. Save.
+
+A dimension reports data collected after it was created; earlier events are not filled in. A standard GA4 property allows 10 item-scoped custom dimensions.

@@ -43,6 +43,6 @@ Search,Search
 "Product Click","Product Click"
 "A product is clicked in a category or search results list. GA4 event: select_item.","A product is clicked in a category or search results list. GA4 event: select_item."
 "Add to Wishlist","Add to Wishlist"
-"A product is added to a wishlist on the product detail page. GA4 event: add_to_wishlist.","A product is added to a wishlist on the product detail page. GA4 event: add_to_wishlist."
+"A product is added to a wishlist, on the product detail page or as an alternative on the wishlist page. GA4 event: add_to_wishlist.","A product is added to a wishlist, on the product detail page or as an alternative on the wishlist page. GA4 event: add_to_wishlist."
 Purchase,Purchase
 "An order is placed; reported once per order. GA4 event: purchase.","An order is placed; reported once per order. GA4 event: purchase."

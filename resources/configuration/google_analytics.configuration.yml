@@ -131,7 +131,7 @@ features:
                             - store
                       - key: add_to_wishlist_event_enabled
                         name: Add to Wishlist
-                        description: 'A product is added to a wishlist on the product detail page. GA4 event: add_to_wishlist.'
+                        description: 'A product is added to a wishlist, on the product detail page or as an alternative on the wishlist page. GA4 event: add_to_wishlist.'
                         type: boolean
                         default_value: false
                         enabled: true
