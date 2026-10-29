@@ -30,3 +30,19 @@ Locale,Sprachraum
 "Product discovery and interaction events.","Ereignisse zur Produktsuche und Produktinteraktion."
 Search,Suche
 "Storefront search is performed. GA4 events: search_results, zero_search_results.","Im Shop wird eine Suche ausgeführt. GA4-Ereignisse: search_results, zero_search_results."
+"Cart Events",Warenkorbereignisse
+"Shopping cart and purchase events.","Warenkorb- und Kaufereignisse."
+"Add to Cart","In den Warenkorb"
+"A product is added to the cart, or a cart item quantity is raised. GA4 event: add_to_cart.","Ein Produkt wird in den Warenkorb gelegt oder die Menge einer Warenkorbposition erhöht. GA4-Ereignis: add_to_cart."
+"Remove from Cart","Aus dem Warenkorb entfernen"
+"A product is removed from the cart, or a cart item quantity is lowered. GA4 event: remove_from_cart.","Ein Produkt wird aus dem Warenkorb entfernt oder die Menge einer Warenkorbposition verringert. GA4-Ereignis: remove_from_cart."
+"Product View","Produktansicht"
+"A product detail page is opened. GA4 event: view_item.","Eine Produktdetailseite wird geöffnet. GA4-Ereignis: view_item."
+"Product List View","Produktlistenansicht"
+"A category or search results page with products is shown. GA4 event: view_item_list.","Eine Kategorie- oder Suchergebnisseite mit Produkten wird angezeigt. GA4-Ereignis: view_item_list."
+"Product Click","Produktklick"
+"A product is clicked in a category or search results list. GA4 event: select_item.","Ein Produkt wird in einer Kategorie- oder Suchergebnisliste angeklickt. GA4-Ereignis: select_item."
+"Add to Wishlist","Zur Wunschliste hinzufügen"
+"A product is added to a wishlist, on the product detail page or as an alternative on the wishlist page. GA4 event: add_to_wishlist.","Ein Produkt wird zu einer Wunschliste hinzugefügt, auf der Produktdetailseite oder als Alternative auf der Wunschlistenseite. GA4-Ereignis: add_to_wishlist."
+Purchase,Kauf
+"An order is placed; reported once per order. GA4 event: purchase.","Eine Bestellung wird aufgegeben; einmal pro Bestellung gemeldet. GA4-Ereignis: purchase."

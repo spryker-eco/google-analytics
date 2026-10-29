@@ -93,7 +93,55 @@ features:
                       - global
                       - store
                   settings:
-                      - key: search_event_ebabled
+                      - key: view_item_event_enabled
+                        name: Product View
+                        description: 'A product detail page is opened. GA4 event: view_item.'
+                        type: boolean
+                        default_value: false
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 6
+                        scopes:
+                            - global
+                            - store
+                      - key: view_item_list_event_enabled
+                        name: Product List View
+                        description: 'A category or search results page with products is shown. GA4 event: view_item_list.'
+                        type: boolean
+                        default_value: false
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 7
+                        scopes:
+                            - global
+                            - store
+                      - key: select_item_event_enabled
+                        name: Product Click
+                        description: 'A product is clicked in a category or search results list. GA4 event: select_item.'
+                        type: boolean
+                        default_value: false
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 8
+                        scopes:
+                            - global
+                            - store
+                      - key: add_to_wishlist_event_enabled
+                        name: Add to Wishlist
+                        description: 'A product is added to a wishlist, on the product detail page or as an alternative on the wishlist page. GA4 event: add_to_wishlist.'
+                        type: boolean
+                        default_value: false
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 9
+                        scopes:
+                            - global
+                            - store
+                      - key: search_event_enabled
                         name: Search
                         description: 'Storefront search is performed. GA4 events: search_results, zero_search_results.'
                         type: boolean
@@ -102,6 +150,54 @@ features:
                         secret: false
                         storefront: true
                         order: 3
+                        scopes:
+                            - global
+                            - store
+                - key: cart_events
+                  name: Cart Events
+                  description: Shopping cart and purchase events.
+                  section: event_tracking
+                  toggle_all: true
+                  layout: compact
+                  enabled: true
+                  order: 3
+                  scopes:
+                      - global
+                      - store
+                  settings:
+                      - key: add_to_cart_event_enabled
+                        name: Add to Cart
+                        description: 'A product is added to the cart, or a cart item quantity is raised. GA4 event: add_to_cart.'
+                        type: boolean
+                        default_value: false
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 4
+                        scopes:
+                            - global
+                            - store
+                      - key: remove_from_cart_event_enabled
+                        name: Remove from Cart
+                        description: 'A product is removed from the cart, or a cart item quantity is lowered. GA4 event: remove_from_cart.'
+                        type: boolean
+                        default_value: false
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 5
+                        scopes:
+                            - global
+                            - store
+                      - key: purchase_event_enabled
+                        name: Purchase
+                        description: 'An order is placed; reported once per order. GA4 event: purchase.'
+                        type: boolean
+                        default_value: false
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 10
                         scopes:
                             - global
                             - store

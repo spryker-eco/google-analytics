@@ -9,10 +9,11 @@
     gtagId: null,
 } %}
 
-{% set shouldRender = data.gtagId is defined %}
+{# Without a Measurement ID nothing is loaded or sent; `is defined` was also true for the empty setting. #}
+{% set shouldRender = data.gtagId is not empty %}
 
-{# Event settings are named `<event>_event_ebabled`, e.g. `search_event_ebabled`. #}
-{% set eventSettingSuffix = '_event_ebabled' %}
+{# Event settings are named `<event>_event_enabled`, e.g. `search_event_enabled`. #}
+{% set eventSettingSuffix = '_event_enabled' %}
 
 {# Maps every event setting to its on/off state by event name, e.g. { search: true }; other settings of the tab never reach the page. #}
 {% set enabledEvents = {} %}
@@ -39,7 +40,16 @@
         : {},
     'traceable-adapter': true,
     'data-gtag-script-src': "https://www.googletagmanager.com/gtag/js?id=#{data.gtagId}",
+    'price-precision': constant('Spryker\\Shared\\Money\\Converter\\IntegerToDecimalConverter::PRICE_PRECISION'),
+    'gtag-event-timeout': 2000,
+    'reported-transactions-limit': 20,
 } %}
+
+{#
+    price-precision - storefront prices are integers of this many parts per currency unit, as Money stores them.
+    gtag-event-timeout - milliseconds an event may wait for Google Analytics to confirm it, enough for a cold script load; a page about to navigate waits no longer.
+    reported-transactions-limit - how many order references are remembered, so reloading the success page does not report an order again.
+#}
 
 {% block component %}
     {% if shouldRender %}
