@@ -94,8 +94,34 @@ interface CartEventData extends EventsHandlerData<EventName> {
 interface PageLoadData extends EventsHandlerData<EventName> {
     currency: string;
     products?: ProductDetails[];
+    // On the cart page: the products of the cart shown.
+    cartProducts?: ProductDetails[];
+    // On a checkout step: the products of the cart being checked out, and its voucher codes, comma separated.
+    checkoutProducts?: ProductDetails[];
+    checkoutCoupon?: string;
+    // The checkout step shown, set for a step that reports its own accepted submit: SHIPMENT or PAYMENT.
+    checkoutStep?: string;
+    // The shipment methods chosen for the cart, as the shopper sees them; a split delivery joins them, e.g. "Standard, Express".
+    checkoutShippingTier?: string;
+    // The payment methods chosen for the cart, as the shopper sees them; a split payment joins them.
+    checkoutPaymentType?: string;
     // On the order success page: the placed order.
     purchase?: Purchase;
+    // On a quote request details page: the quote request shown.
+    quoteRequest?: QuoteRequest;
+}
+
+// Identified by UUIDs only: the quote request reference contains the customer reference, and company and business unit names
+// may be a person's name.
+interface QuoteRequest {
+    uuid: string;
+    version?: number;
+    // False once the customer has sent it to the agent.
+    isEditable?: boolean;
+    currency?: string;
+    companyId?: string;
+    businessUnitId?: string;
+    products?: ProductDetails[];
 }
 
 // Amounts in cents; product prices are the net price paid per unit, so the value excludes shipping and tax, which are sent separately.
@@ -164,15 +190,68 @@ type ItemsEventName =
     | 'view_item_list'
     | 'select_item'
     | 'add_to_wishlist'
+    | 'view_cart'
+    | 'begin_checkout'
+    | 'add_shipping_info'
+    | 'add_payment_info'
     | 'purchase';
 
+// GA4 sends items only with its ecommerce events and leaves them out of every other event, so these events carry the value of the
+// products, not the products.
+type ValueEventName = 'request_quote' | 'quote_submitted';
+
 const PAGE_PRODUCT_DETAIL = 'PDP';
+// The query parameters Google Analytics reads for campaign attribution. Every other query parameter, and the fragment, is left out of
+// the page URLs sent with every hit, as they may carry personal data, e.g. the token of a password reset link.
+const CAMPAIGN_QUERY_PARAMETERS: ReadonlySet<string> = new Set([
+    'utm_source',
+    'utm_medium',
+    'utm_campaign',
+    'utm_term',
+    'utm_content',
+    'utm_id',
+    'utm_source_platform',
+    'utm_creative_format',
+    'utm_marketing_tactic',
+    'gclid',
+    'gbraid',
+    'wbraid',
+    'dclid',
+    '_gl',
+]);
+// A quote request page has the quote request reference in its path, e.g. /quote-request/details/DE--21-8, and in its title. The
+// reference contains the customer reference, so it is left out of the page URLs and the title, for the agent's pages as well.
+const QUOTE_REQUEST_REFERENCE_PATH_PATTERN = /(\/quote-request\/[\w-]+\/)([^/]+)/;
 const PAGE_CHECKOUT_SUCCESS = 'CHECKOUT_SUCCESS';
+const PAGE_CART = 'CART';
+const PAGE_CHECKOUT = 'CHECKOUT';
+// Set in the tab when the customer clicks to start checkout, taken by the next page load: a checkout step reports begin_checkout,
+// any other page, e.g. the cart a blocked checkout returns to, only discards it. Reloads and moves between steps find none.
+const CHECKOUT_START_REQUEST_STORAGE_KEY = 'ga4-checkout-start-requested';
+const CHECKOUT_STEP_SHIPMENT = 'SHIPMENT';
+const CHECKOUT_STEP_PAYMENT = 'PAYMENT';
+// Set in the tab when the customer submits the shipment or payment step, taken by the next page load: the step after it reports
+// add_shipping_info or add_payment_info, the same step shown again with errors only discards it.
+const SHIPMENT_SUBMIT_STORAGE_KEY = 'ga4-shipment-submitted';
+const PAYMENT_SUBMIT_STORAGE_KEY = 'ga4-payment-submitted';
+// The shipping tier and payment type last reported in this checkout: continuing with the same methods is not a new choice.
+// A new checkout start forgets them.
+const REPORTED_SHIPPING_TIER_STORAGE_KEY = 'ga4-reported-shipping-tier';
+const REPORTED_PAYMENT_TYPE_STORAGE_KEY = 'ga4-reported-payment-type';
+// Set in the tab when the customer submits the quote request form, taken by the next page load: the details page of the new quote
+// request reports request_quote, the form shown again with errors only discards it.
+const QUOTE_REQUEST_CREATE_STORAGE_KEY = 'ga4-quote-request-create-submitted';
+// Set in the tab when the customer sends the quote request to the agent, taken by the next page load: the details page it returns to
+// reports quote_submitted once the quote request is no longer editable; a send the shop refused leaves it editable.
+const QUOTE_REQUEST_SEND_STORAGE_KEY = 'ga4-quote-request-send-requested';
 
 // GA4 reports a variant as one string, e.g. "Red / 64 GB".
 const VARIANT_VALUE_SEPARATOR = ' / ';
 // Order references already reported, so reloading or returning to the success page does not report an order again.
 const REPORTED_TRANSACTIONS_STORAGE_KEY = 'ga4-reported-transaction-ids';
+// Quote request versions already reported as sent, as `<uuid>:<version>`, so a send refused for an already sent quote request,
+// e.g. from a second tab, does not report it again; a revised quote request sent again is a new version.
+const REPORTED_QUOTE_SUBMISSIONS_STORAGE_KEY = 'ga4-reported-quote-submissions';
 // List events describe what was shown, not a purchase intent, so a summed value of their products would mislead reports.
 const EVENTS_WITHOUT_VALUE: ReadonlySet<ItemsEventName> = new Set(['view_item_list', 'select_item']);
 // GA4 item category levels, from the top-level category down.
@@ -205,9 +284,56 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             window.dataLayer.push(arguments);
         };
         window.gtag('js', new Date());
+        // Set before the config, so the automatic page_view and every event of the page carry the URLs and title without personal data.
+        window.gtag('set', {
+            page_location: this.getUrlWithoutPersonalData(window.location.href),
+            page_referrer: this.getUrlWithoutPersonalData(document.referrer),
+            page_title: this.getTitleWithoutPersonalData(document.title),
+        });
         window.gtag('config', appId);
 
         super.init();
+    }
+
+    // Origin and path, and only the campaign query parameters; an empty or invalid URL, e.g. no referrer, stays empty.
+    protected getUrlWithoutPersonalData(url: string): string {
+        let parsedUrl: URL;
+
+        try {
+            parsedUrl = new URL(url);
+        } catch {
+            return '';
+        }
+
+        const campaignQuery = new URLSearchParams();
+
+        for (const [name, value] of parsedUrl.searchParams) {
+            if (CAMPAIGN_QUERY_PARAMETERS.has(name)) {
+                campaignQuery.append(name, value);
+            }
+        }
+
+        const query = campaignQuery.toString();
+        const path = this.getPathWithoutQuoteRequestReference(parsedUrl.pathname);
+
+        return query ? `${parsedUrl.origin}${path}?${query}` : `${parsedUrl.origin}${path}`;
+    }
+
+    protected getPathWithoutQuoteRequestReference(path: string): string {
+        return path.replace(QUOTE_REQUEST_REFERENCE_PATH_PATTERN, '$1');
+    }
+
+    // The title of a quote request page shows its reference, which the path of the page names.
+    protected getTitleWithoutPersonalData(title: string): string {
+        const quoteRequestReferenceMatch = window.location.pathname.match(QUOTE_REQUEST_REFERENCE_PATH_PATTERN);
+
+        if (!quoteRequestReferenceMatch) {
+            return title;
+        }
+
+        const quoteRequestReference = decodeURIComponent(quoteRequestReferenceMatch[2]);
+
+        return title.split(quoteRequestReference).join('').trim();
     }
 
     override getHandlers(): Partial<TraceableEventHandlers> {
@@ -241,6 +367,40 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
 
         if (this.isEventEnabled('purchase')) {
             pageLoadHandlers.push(this.purchaseHandler);
+        }
+
+        if (this.isEventEnabled('view_cart')) {
+            pageLoadHandlers.push(this.viewCartHandler);
+        }
+
+        const isBeginCheckoutEnabled = this.isEventEnabled('begin_checkout');
+        const isAddShippingInfoEnabled = this.isEventEnabled('add_shipping_info');
+        const isAddPaymentInfoEnabled = this.isEventEnabled('add_payment_info');
+
+        // A checkout start is reported by begin_checkout and opens a new checkout, in which the shipment and payment choices are reported anew.
+        if (isBeginCheckoutEnabled || isAddShippingInfoEnabled || isAddPaymentInfoEnabled) {
+            handlers.CHECKOUT_START = [this.checkoutStartHandler];
+            pageLoadHandlers.push(this.checkoutStartPageLoadHandler);
+        }
+
+        if (isAddShippingInfoEnabled) {
+            handlers.SHIPMENT_SUBMIT = [this.shipmentSubmitHandler];
+            pageLoadHandlers.push(this.addShippingInfoHandler);
+        }
+
+        if (isAddPaymentInfoEnabled) {
+            handlers.PAYMENT_SUBMIT = [this.paymentSubmitHandler];
+            pageLoadHandlers.push(this.addPaymentInfoHandler);
+        }
+
+        if (this.isEventEnabled('request_quote')) {
+            handlers.QUOTE_REQUEST_CREATE = [this.quoteRequestCreateHandler];
+            pageLoadHandlers.push(this.requestQuoteHandler);
+        }
+
+        if (this.isEventEnabled('quote_submitted')) {
+            handlers.QUOTE_REQUEST_SEND = [this.quoteRequestSendHandler];
+            pageLoadHandlers.push(this.quoteSubmittedHandler);
         }
 
         handlers.PAGE_LOAD = pageLoadHandlers;
@@ -313,6 +473,258 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         return this.sendItemsEvent('add_to_wishlist', data.currency, [{ ...wishedProduct, quantity: 1 }]);
     }
 
+    // A cart review the customer chose: the cart page opened from a link or the address bar, with at least one product.
+    protected viewCartHandler(data: PageLoadData): void {
+        const cartProducts = data.cartProducts ?? [];
+
+        if (data.page !== PAGE_CART || !cartProducts.length || !this.isPageOpenedByNavigation()) {
+            return;
+        }
+
+        this.sendItemsEvent('view_cart', data.currency, cartProducts);
+    }
+
+    // A reload, the Back or Forward button, or the end of a redirect, e.g. after a form adding to the cart, is not a new visit of the page.
+    protected isPageOpenedByNavigation(): boolean {
+        const navigationTiming = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+
+        if (!navigationTiming) {
+            return false;
+        }
+
+        return navigationTiming.type === 'navigate' && navigationTiming.redirectCount === 0;
+    }
+
+    // The checkout button only requests checkout: the shop may still send the customer back to the cart, e.g. for an unavailable product.
+    protected checkoutStartHandler(): void {
+        this.setSessionStorageItem(CHECKOUT_START_REQUEST_STORAGE_KEY, '1');
+    }
+
+    // Read and removed on every page load, so only the page the checkout button opened can start a checkout.
+    protected checkoutStartPageLoadHandler(data: PageLoadData): void {
+        const isCheckoutStartRequested = this.takeSessionStorageItem(CHECKOUT_START_REQUEST_STORAGE_KEY) !== null;
+        const isCheckoutStarted = isCheckoutStartRequested && data.page === PAGE_CHECKOUT;
+
+        if (!isCheckoutStarted) {
+            return;
+        }
+
+        this.removeSessionStorageItem(REPORTED_SHIPPING_TIER_STORAGE_KEY);
+        this.removeSessionStorageItem(REPORTED_PAYMENT_TYPE_STORAGE_KEY);
+
+        if (this.isEventEnabled('begin_checkout')) {
+            this.beginCheckoutHandler(data);
+        }
+    }
+
+    // Reported on the first checkout step the requested checkout opens, once per click on the checkout button.
+    protected beginCheckoutHandler(data: PageLoadData): void {
+        const checkoutProducts = data.checkoutProducts ?? [];
+
+        if (!checkoutProducts.length) {
+            return;
+        }
+
+        this.sendItemsEvent('begin_checkout', data.currency, checkoutProducts, this.getCheckoutParams(data));
+    }
+
+    // The submit only requests the shipment methods: the shop may still show the step again, e.g. when a method is no longer available.
+    protected shipmentSubmitHandler(): void {
+        this.setSessionStorageItem(SHIPMENT_SUBMIT_STORAGE_KEY, '1');
+    }
+
+    // Reported on the page the accepted shipment step leads to, once per chosen set of shipment methods in a checkout.
+    protected addShippingInfoHandler(data: PageLoadData): void {
+        const shippingTier = data.checkoutShippingTier ?? '';
+        const isNewShippingTier = this.takeNewCheckoutStepChoice(
+            data,
+            CHECKOUT_STEP_SHIPMENT,
+            SHIPMENT_SUBMIT_STORAGE_KEY,
+            REPORTED_SHIPPING_TIER_STORAGE_KEY,
+            shippingTier,
+        );
+
+        if (!isNewShippingTier) {
+            return;
+        }
+
+        this.sendItemsEvent('add_shipping_info', data.currency, data.checkoutProducts ?? [], {
+            ...this.getCheckoutParams(data),
+            shipping_tier: shippingTier,
+        });
+    }
+
+    // The submit only requests the payment method: the shop may still show the step again, e.g. when required details are missing.
+    protected paymentSubmitHandler(): void {
+        this.setSessionStorageItem(PAYMENT_SUBMIT_STORAGE_KEY, '1');
+    }
+
+    // Reported on the page the accepted payment step leads to, once per chosen payment method in a checkout.
+    // Only the method name is sent, never the payment details the step asks for.
+    protected addPaymentInfoHandler(data: PageLoadData): void {
+        const paymentType = data.checkoutPaymentType ?? '';
+        const isNewPaymentType = this.takeNewCheckoutStepChoice(
+            data,
+            CHECKOUT_STEP_PAYMENT,
+            PAYMENT_SUBMIT_STORAGE_KEY,
+            REPORTED_PAYMENT_TYPE_STORAGE_KEY,
+            paymentType,
+        );
+
+        if (!isNewPaymentType) {
+            return;
+        }
+
+        this.sendItemsEvent('add_payment_info', data.currency, data.checkoutProducts ?? [], {
+            ...this.getCheckoutParams(data),
+            payment_type: paymentType,
+        });
+    }
+
+    // Takes the step's submit request; true when the shop accepted the step, i.e. the page shown is another one, and the choice differs
+    // from the one last reported in this checkout, which it then remembers.
+    protected takeNewCheckoutStepChoice(
+        data: PageLoadData,
+        step: string,
+        submitStorageKey: string,
+        reportedChoiceStorageKey: string,
+        choice: string,
+    ): boolean {
+        const isStepSubmitted = this.takeSessionStorageItem(submitStorageKey) !== null;
+        const isStepAccepted = isStepSubmitted && data.page === PAGE_CHECKOUT && data.checkoutStep !== step;
+        const hasCheckoutProducts = Boolean(data.checkoutProducts?.length);
+
+        if (!isStepAccepted || !choice || !hasCheckoutProducts) {
+            return false;
+        }
+
+        const isChoiceChanged = choice !== this.getSessionStorageItem(reportedChoiceStorageKey);
+
+        if (!isChoiceChanged) {
+            return false;
+        }
+
+        this.setSessionStorageItem(reportedChoiceStorageKey, choice);
+
+        return true;
+    }
+
+    // The submit only requests the quote request: the shop may still show the form again, e.g. for an invalid delivery date.
+    protected quoteRequestCreateHandler(): void {
+        this.setSessionStorageItem(QUOTE_REQUEST_CREATE_STORAGE_KEY, '1');
+    }
+
+    // Reported on the details page the created quote request opens, once per submitted quote request form.
+    protected requestQuoteHandler(data: PageLoadData): void {
+        const isQuoteRequestCreateSubmitted = this.takeSessionStorageItem(QUOTE_REQUEST_CREATE_STORAGE_KEY) !== null;
+        const quoteRequest = data.quoteRequest;
+        const quoteRequestProducts = quoteRequest?.products ?? [];
+
+        if (!isQuoteRequestCreateSubmitted || !quoteRequest?.uuid || !quoteRequestProducts.length) {
+            return;
+        }
+
+        this.sendValueEvent(
+            'request_quote',
+            quoteRequest.currency || data.currency,
+            quoteRequestProducts,
+            this.getQuoteRequestParams(quoteRequest),
+        );
+    }
+
+    protected quoteRequestSendHandler(): void {
+        this.setSessionStorageItem(QUOTE_REQUEST_SEND_STORAGE_KEY, '1');
+    }
+
+    // Reported on the details page the send returns to, once per send the shop accepted.
+    protected quoteSubmittedHandler(data: PageLoadData): void {
+        const isQuoteRequestSendRequested = this.takeSessionStorageItem(QUOTE_REQUEST_SEND_STORAGE_KEY) !== null;
+        const quoteRequest = data.quoteRequest;
+        const isQuoteRequestSent = isQuoteRequestSendRequested && quoteRequest?.isEditable === false;
+        const quoteRequestProducts = quoteRequest?.products ?? [];
+
+        if (!isQuoteRequestSent || !quoteRequest?.uuid || !quoteRequestProducts.length) {
+            return;
+        }
+
+        const quoteSubmissionId = `${quoteRequest.uuid}:${quoteRequest.version ?? ''}`;
+
+        if (this.isIdReported(REPORTED_QUOTE_SUBMISSIONS_STORAGE_KEY, quoteSubmissionId)) {
+            return;
+        }
+
+        this.rememberReportedId(REPORTED_QUOTE_SUBMISSIONS_STORAGE_KEY, quoteSubmissionId);
+
+        const quoteSubmittedParams = this.getQuoteRequestParams(quoteRequest);
+
+        if (quoteRequest.version) {
+            quoteSubmittedParams.quote_version = quoteRequest.version;
+        }
+
+        this.sendValueEvent(
+            'quote_submitted',
+            quoteRequest.currency || data.currency,
+            quoteRequestProducts,
+            quoteSubmittedParams,
+        );
+    }
+
+    protected getQuoteRequestParams(quoteRequest: QuoteRequest): Record<string, unknown> {
+        const quoteRequestParams: Record<string, unknown> = { quote_id: quoteRequest.uuid };
+
+        if (quoteRequest.companyId) {
+            quoteRequestParams.company_id = quoteRequest.companyId;
+        }
+
+        if (quoteRequest.businessUnitId) {
+            quoteRequestParams.business_unit_id = quoteRequest.businessUnitId;
+        }
+
+        return quoteRequestParams;
+    }
+
+    protected getCheckoutParams(data: PageLoadData): Record<string, unknown> {
+        const checkoutParams: Record<string, unknown> = {};
+
+        if (data.checkoutCoupon) {
+            checkoutParams.coupon = data.checkoutCoupon;
+        }
+
+        return checkoutParams;
+    }
+
+    // Session storage may be unavailable, e.g. in a private window that blocks it; the checkout events are then not reported.
+    protected getSessionStorageItem(key: string): string | null {
+        try {
+            return window.sessionStorage.getItem(key);
+        } catch {
+            return null;
+        }
+    }
+
+    protected setSessionStorageItem(key: string, value: string): void {
+        try {
+            window.sessionStorage.setItem(key, value);
+        } catch {
+            // Not reported, see getSessionStorageItem.
+        }
+    }
+
+    protected removeSessionStorageItem(key: string): void {
+        try {
+            window.sessionStorage.removeItem(key);
+        } catch {
+            // Not reported, see getSessionStorageItem.
+        }
+    }
+
+    protected takeSessionStorageItem(key: string): string | null {
+        const value = this.getSessionStorageItem(key);
+        this.removeSessionStorageItem(key);
+
+        return value;
+    }
+
     protected purchaseHandler(data: PageLoadData): void {
         const purchase = data.purchase;
 
@@ -320,7 +732,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             return;
         }
 
-        if (this.isTransactionReported(purchase.transactionId)) {
+        if (this.isIdReported(REPORTED_TRANSACTIONS_STORAGE_KEY, purchase.transactionId)) {
             return;
         }
 
@@ -341,32 +753,29 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         }
 
         this.sendItemsEvent('purchase', purchase.currency || data.currency, purchase.products, purchaseParams);
-        this.rememberReportedTransaction(purchase.transactionId);
+        this.rememberReportedId(REPORTED_TRANSACTIONS_STORAGE_KEY, purchase.transactionId);
     }
 
-    protected isTransactionReported(transactionId: string): boolean {
-        return this.getReportedTransactionIds().includes(transactionId);
+    protected isIdReported(storageKey: string, id: string): boolean {
+        return this.getReportedIds(storageKey).includes(id);
     }
 
-    protected rememberReportedTransaction(transactionId: string): void {
-        const reportedTransactionIds = [...this.getReportedTransactionIds(), transactionId].slice(
-            -this.reportedTransactionsLimit,
-        );
+    // Keeps the latest ids only, as many as reportedTransactionsLimit.
+    protected rememberReportedId(storageKey: string, id: string): void {
+        const reportedIds = [...this.getReportedIds(storageKey), id].slice(-this.reportedTransactionsLimit);
 
         try {
-            window.localStorage.setItem(REPORTED_TRANSACTIONS_STORAGE_KEY, JSON.stringify(reportedTransactionIds));
+            window.localStorage.setItem(storageKey, JSON.stringify(reportedIds));
         } catch {
-            // Without storage (e.g. a private window) a reload can report the order again; the purchase itself is not affected.
+            // Without storage (e.g. a private window) a reload can report the same id again; the shop itself is not affected.
         }
     }
 
-    protected getReportedTransactionIds(): string[] {
+    protected getReportedIds(storageKey: string): string[] {
         try {
-            const reportedTransactionIds = JSON.parse(
-                window.localStorage.getItem(REPORTED_TRANSACTIONS_STORAGE_KEY) ?? '[]',
-            );
+            const reportedIds = JSON.parse(window.localStorage.getItem(storageKey) ?? '[]');
 
-            return Array.isArray(reportedTransactionIds) ? reportedTransactionIds : [];
+            return Array.isArray(reportedIds) ? reportedIds : [];
         } catch {
             return [];
         }
@@ -446,6 +855,33 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             eventParams.value = value;
         }
 
+        return this.sendEvent(eventName, eventParams);
+    }
+
+    // Like sendItemsEvent, with the value of the products instead of the products, which GA4 would leave out of this event.
+    protected sendValueEvent(
+        eventName: ValueEventName,
+        currency: string,
+        products: ProductDetails[],
+        additionalParams: Record<string, unknown> = {},
+    ): Promise<void> {
+        const items = this.getItems(products);
+
+        if (!items.length) {
+            return Promise.resolve();
+        }
+
+        const eventParams: Record<string, unknown> = { ...additionalParams, currency };
+        const value = this.getItemsValue(items);
+
+        if (value !== undefined) {
+            eventParams.value = value;
+        }
+
+        return this.sendEvent(eventName, eventParams);
+    }
+
+    protected sendEvent(eventName: ItemsEventName | ValueEventName, eventParams: Record<string, unknown>): Promise<void> {
         // Settles at once when nothing is gained by waiting: a loaded script sends the event with a keepalive request,
         // which outlives a navigation, and a script that failed to load (e.g. a content blocker) can never send it.
         // Only an event raised while the script is still loading sits in the data layer, which a navigation drops, so
