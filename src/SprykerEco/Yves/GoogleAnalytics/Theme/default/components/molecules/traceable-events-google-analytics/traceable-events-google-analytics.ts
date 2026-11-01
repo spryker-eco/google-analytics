@@ -5,6 +5,10 @@ import {
     TraceableEventHandlers,
 } from 'TraceableEventWidget/components/molecules/traceable-events-orchestrator/base-traceable-event-adapter';
 import {
+    CONSENT_PURPOSE_STATISTICS,
+    ConsentPurpose,
+} from 'TraceableEventWidget/components/molecules/traceable-events-consent/consent-purposes';
+import {
     EventsHandlerData,
     EventName,
     TraceableEventHandler,
@@ -24,7 +28,7 @@ declare global {
     interface Window {
         dataLayer: unknown[];
         gtag: GtagFunction;
-        // Set by the gtag-script head tag's onload and onerror, which fire before this component mounts and can listen.
+        // Set by the gtag.js script tag's load and error listeners, which may fire before the first event looks for the script.
         isGtagScriptLoaded?: boolean;
         isGtagScriptFailed?: boolean;
     }
@@ -273,10 +277,32 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     protected isGtagScriptWatched = false;
 
     override init(): void {
-        const { appId, store, locale } = this.initialData;
+        const { store, locale } = this.initialData;
 
         this.currentStore = store;
         this.currentLocale = locale;
+
+        super.init();
+    }
+
+    // GA4 measures how the shop is used; a project that links it to advertising, e.g. Google Ads remarketing, declares marketing as well.
+    override get consentPurposes(): ConsentPurpose[] {
+        return [CONSENT_PURPOSE_STATISTICS];
+    }
+
+    // The purposes a GA4 event serves, by its GA4 name; a project groups single events differently in its consent component.
+    protected getGtagEventConsentPurposes(_gtagEventName: ItemsEventName | ValueEventName): ConsentPurpose[] {
+        return this.consentPurposes;
+    }
+
+    protected isGtagEventAllowed(gtagEventName: ItemsEventName | ValueEventName): boolean {
+        return this.isProviderEventAllowed(gtagEventName, this.getGtagEventConsentPurposes(gtagEventName));
+    }
+
+    // Started once the orchestrator allows the adapter, e.g. after the shopper's consent: before, gtag.js is not requested, no Google
+    // Analytics cookie is written and no page view is sent.
+    override activate(): void {
+        const { appId } = this.initialData;
 
         window.dataLayer = window.dataLayer || [];
         window.gtag = function gtag(): void {
@@ -292,7 +318,23 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         });
         window.gtag('config', appId);
 
-        super.init();
+        this.loadGtagScript();
+    }
+
+    // The onload and onerror flags record the outcome for watchGtagScriptState, which may only look for the script later.
+    protected loadGtagScript(): void {
+        const gtagScript = document.createElement('script');
+
+        gtagScript.async = true;
+        gtagScript.src = this.gtagScriptSrc;
+        gtagScript.addEventListener('load', () => {
+            window.isGtagScriptLoaded = true;
+        });
+        gtagScript.addEventListener('error', () => {
+            window.isGtagScriptFailed = true;
+        });
+
+        document.head.appendChild(gtagScript);
     }
 
     // Origin and path, and only the campaign query parameters; an empty or invalid URL, e.g. no referrer, stays empty.
@@ -649,7 +691,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
 
         const quoteSubmissionId = `${quoteRequest.uuid}:${quoteRequest.version ?? ''}`;
 
-        if (this.isIdReported(REPORTED_QUOTE_SUBMISSIONS_STORAGE_KEY, quoteSubmissionId)) {
+        if (this.isIdReported(REPORTED_QUOTE_SUBMISSIONS_STORAGE_KEY, quoteSubmissionId) || !this.isGtagEventAllowed('quote_submitted')) {
             return;
         }
 
@@ -732,7 +774,8 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             return;
         }
 
-        if (this.isIdReported(REPORTED_TRANSACTIONS_STORAGE_KEY, purchase.transactionId)) {
+        // A purchase not allowed yet is not remembered either, so the confirmation page reports it once consent allows it.
+        if (this.isIdReported(REPORTED_TRANSACTIONS_STORAGE_KEY, purchase.transactionId) || !this.isGtagEventAllowed('purchase')) {
             return;
         }
 
@@ -882,6 +925,10 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     }
 
     protected sendEvent(eventName: ItemsEventName | ValueEventName, eventParams: Record<string, unknown>): Promise<void> {
+        if (!this.isGtagEventAllowed(eventName)) {
+            return Promise.resolve();
+        }
+
         // Settles at once when nothing is gained by waiting: a loaded script sends the event with a keepalive request,
         // which outlives a navigation, and a script that failed to load (e.g. a content blocker) can never send it.
         // Only an event raised while the script is still loading sits in the data layer, which a navigation drops, so
