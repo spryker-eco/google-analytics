@@ -26,6 +26,12 @@ If Search tracking was enabled before the upgrade:
 
 2. Re-save any Google Analytics setting in the Back Office once for each scope that held the value (global, and each store with an override). Saving rebuilds the storefront configuration storage of that scope from the renamed rows.
 
+The ecommerce events report a product by its abstract product SKU, which the product concrete storage data of `spryker/product-storage` carries as `abstractSku`. Products published before the upgrade do not have it until they are published again, and until then they are reported with their concrete product SKU as `item_id`. Republish them once after the upgrade:
+
+```bash
+vendor/bin/console publish:trigger-events -r product_concrete
+```
+
 ## Features
 
 - Storefront TypeScript component that pushes `search_results` and `zero_search_results` events to GA4 via `gtag`, including store and locale as custom parameters
