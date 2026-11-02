@@ -48,10 +48,12 @@ Every ecommerce event reports a product with the same item data, so GA4 joins th
 |---|---|
 | `item_id` | The abstract product SKU |
 | `item_name` | The abstract product name |
+| `item_variant` | The values of the attributes the variants of the product differ in, e.g. `Red / 64 GB`, where a variant is known |
+| `item_brand`, `item_category` … `item_category5` | The brand and the category path of the product, top level first |
 | `concrete_sku` | Custom item parameter: the concrete product SKU, where the event knows the concrete product, e.g. in the cart. A product card and a product detail page without a selected variant of a product with several variants have none. |
 | `price`, `quantity` | The unit price in the currency, e.g. 19.99, and the quantity added or removed |
 
-The lines of one action for the same concrete product are sent as one item with their quantities added up. Without a price for every item, e.g. for a guest who may not see prices, the event is sent without `value`.
+The lines of one action for the same concrete product and variant are sent as one item with their quantities added up. Without a price for every item, e.g. for a guest who may not see prices, the event is sent without `value`.
 
 ### Report by concrete product
 
