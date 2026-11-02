@@ -110,6 +110,11 @@ interface GtagItem {
 
 type ItemsEventName = 'add_to_cart' | 'remove_from_cart';
 
+// The GA4 events a Back Office setting can switch off, in the order their handlers run when several listen to one storefront event.
+const GOOGLE_ANALYTICS_EVENT_NAMES = ['search', 'add_to_cart', 'remove_from_cart'] as const;
+
+type GoogleAnalyticsEventName = (typeof GOOGLE_ANALYTICS_EVENT_NAMES)[number];
+
 // The query parameters Google Analytics reads for campaign attribution. Every other query parameter, and the fragment, is left out of
 // the page URLs sent with every hit, as they may carry personal data, e.g. the token of a password reset link.
 const CAMPAIGN_QUERY_PARAMETERS: ReadonlySet<string> = new Set([
@@ -215,26 +220,64 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         return title.split(quoteRequestReference).join('').trim();
     }
 
+    // Only the storefront events of the GA4 events switched on in the Back Office are listened to.
     override getHandlers(): Partial<TraceableEventHandlers> {
+        const handlersByGoogleAnalyticsEvent = this.getHandlersByGoogleAnalyticsEvent();
         const handlers: Partial<TraceableEventHandlers> = {};
 
-        if (this.isEventEnabled('search')) {
-            handlers.SEARCH_EVENT = [this.searchEventHandler];
-        }
+        for (const googleAnalyticsEventName of GOOGLE_ANALYTICS_EVENT_NAMES) {
+            if (!this.isEventEnabled(googleAnalyticsEventName)) {
+                continue;
+            }
 
-        if (this.isEventEnabled('add_to_cart')) {
-            handlers.ADD_TO_CART = [this.addToCartHandler];
+            this.addHandlers(handlers, handlersByGoogleAnalyticsEvent[googleAnalyticsEventName]);
         }
-
-        if (this.isEventEnabled('remove_from_cart')) {
-            handlers.REMOVE_FROM_CART = [this.removeFromCartHandler];
-        }
-
-        // Raising a quantity is an add_to_cart, lowering it a remove_from_cart; each is checked against its own setting.
-        handlers.CHANGE_CART_QUANTITY = [this.cartQuantityChangeHandler];
-        handlers.CART_ITEMS_CHANGE = [this.cartItemsChangeHandler];
 
         return handlers;
+    }
+
+    // The storefront events each GA4 event listens to. The entries are plain method references, so a handler that several GA4 events need is recognised and registered once.
+    protected getHandlersByGoogleAnalyticsEvent(): Record<GoogleAnalyticsEventName, Partial<TraceableEventHandlers>> {
+        return {
+            search: {
+                SEARCH_EVENT: [this.searchEventHandler],
+            },
+            // Raising a quantity is an add_to_cart, lowering it a remove_from_cart, so the quantity handlers check each setting themselves.
+            add_to_cart: {
+                ADD_TO_CART: [this.addToCartHandler],
+                CHANGE_CART_QUANTITY: [this.cartQuantityChangeHandler],
+                CART_ITEMS_CHANGE: [this.cartItemsChangeHandler],
+            },
+            remove_from_cart: {
+                REMOVE_FROM_CART: [this.removeFromCartHandler],
+                CHANGE_CART_QUANTITY: [this.cartQuantityChangeHandler],
+                CART_ITEMS_CHANGE: [this.cartItemsChangeHandler],
+            },
+        };
+    }
+
+    protected addHandlers(
+        handlers: Partial<TraceableEventHandlers>,
+        eventHandlers: Partial<TraceableEventHandlers>,
+    ): void {
+        // The keys come from an object typed with storefront event names.
+        const eventNames = Object.keys(eventHandlers) as EventName[];
+
+        for (const eventName of eventNames) {
+            const registeredHandlers = handlers[eventName] ?? [];
+
+            for (const handler of eventHandlers[eventName] ?? []) {
+                const isHandlerRegistered = registeredHandlers.includes(handler);
+
+                if (isHandlerRegistered) {
+                    continue;
+                }
+
+                registeredHandlers.push(handler);
+            }
+
+            handlers[eventName] = registeredHandlers;
+        }
     }
 
     protected addToCartHandler(data: CartEventData): Promise<void> {
@@ -512,7 +555,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     }
 
     // An event missing from the map stays on, so tracking keeps working while the configuration schema is not synced yet.
-    protected isEventEnabled(eventName: string): boolean {
+    protected isEventEnabled(eventName: GoogleAnalyticsEventName): boolean {
         const isEventDisabled = this.initialData.events[eventName] === false;
 
         return !isEventDisabled;
