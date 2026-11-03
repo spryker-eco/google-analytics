@@ -5,6 +5,10 @@ import {
     TraceableEventHandlers,
 } from 'TraceableEventWidget/components/molecules/traceable-events-orchestrator/base-traceable-event-adapter';
 import {
+    CONSENT_PURPOSE_STATISTICS,
+    ConsentPurpose,
+} from 'TraceableEventWidget/components/molecules/traceable-events-consent/consent-purposes';
+import {
     EventsHandlerData,
     EventName,
 } from 'TraceableEventWidget/components/molecules/traceable-events-orchestrator/traceable-events-orchestrator';
@@ -110,6 +114,11 @@ interface GtagItem {
 
 type ItemsEventName = 'add_to_cart' | 'remove_from_cart';
 
+type SearchEventName = 'search_results' | 'zero_search_results';
+
+// Every event name the adapter sends to GA4, by which a project's consent component may group single events.
+type GtagEventName = ItemsEventName | SearchEventName;
+
 // The GA4 events a Back Office setting can switch off, in the order their handlers run when several listen to one storefront event.
 const GOOGLE_ANALYTICS_EVENT_NAMES = ['search', 'add_to_cart', 'remove_from_cart'] as const;
 
@@ -154,13 +163,34 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     protected pendingEventSettlers = new Set<() => void>();
     protected isGtagScriptLoaded = false;
     protected isGtagScriptFailed = false;
-    protected isGtagScriptWatched = false;
 
     override init(): void {
-        const { appId, store, locale } = this.initialData;
+        const { store, locale } = this.initialData;
 
         this.currentStore = store;
         this.currentLocale = locale;
+
+        super.init();
+    }
+
+    // GA4 measures how the shop is used; a project that links it to advertising, e.g. Google Ads remarketing, declares marketing as well.
+    override get consentPurposes(): ConsentPurpose[] {
+        return [CONSENT_PURPOSE_STATISTICS];
+    }
+
+    // The purposes a GA4 event serves, by its GA4 name; a project groups single events differently in its consent component.
+    protected getGtagEventConsentPurposes(_gtagEventName: GtagEventName): ConsentPurpose[] {
+        return this.consentPurposes;
+    }
+
+    protected isGtagEventAllowed(gtagEventName: GtagEventName): boolean {
+        return this.isProviderEventAllowed(gtagEventName, this.getGtagEventConsentPurposes(gtagEventName));
+    }
+
+    // Started once the orchestrator allows the adapter, e.g. after the shopper's consent: before, gtag.js is not requested, no Google
+    // Analytics cookie is written and no page view is sent.
+    override activate(): void {
+        const { appId } = this.initialData;
 
         window.dataLayer = window.dataLayer || [];
         window.gtag = function gtag(): void {
@@ -176,7 +206,35 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         });
         window.gtag('config', appId);
 
-        super.init();
+        this.loadGtagScript();
+    }
+
+    // Events sent while the script loads wait for it; a script that fails to load, e.g. for a content blocker, settles them at once.
+    protected loadGtagScript(): void {
+        const gtagScript = document.createElement('script');
+
+        gtagScript.async = true;
+        gtagScript.src = this.gtagScriptSrc;
+        gtagScript.addEventListener(
+            'load',
+            () => {
+                this.isGtagScriptLoaded = true;
+            },
+            { once: true },
+        );
+        gtagScript.addEventListener(
+            'error',
+            () => {
+                this.isGtagScriptFailed = true;
+
+                for (const settle of this.pendingEventSettlers) {
+                    settle();
+                }
+            },
+            { once: true },
+        );
+
+        document.head.appendChild(gtagScript);
     }
 
     // Origin and path, and only the campaign query parameters; an empty or invalid URL, e.g. no referrer, stays empty.
@@ -357,13 +415,15 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     }
 
     protected sendEvent(eventName: ItemsEventName, eventParams: Record<string, unknown>): Promise<void> {
+        if (!this.isGtagEventAllowed(eventName)) {
+            return Promise.resolve();
+        }
+
         // Settles at once when nothing is gained by waiting: a loaded script sends the event with a keepalive request,
         // which outlives a navigation, and a script that failed to load (e.g. a content blocker) can never send it.
         // Only an event raised while the script is still loading sits in the data layer, which a navigation drops, so
         // that one resolves once Google Analytics has handled it, so a page that is about to navigate can wait for it.
         return new Promise((resolve) => {
-            this.watchGtagScriptState();
-
             if (this.isGtagScriptLoaded || this.isGtagScriptFailed) {
                 window.gtag('event', eventName, eventParams);
                 resolve();
@@ -386,41 +446,6 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
                 event_timeout: this.gtagEventTimeout,
             });
         });
-    }
-
-    // The script-loader next to this component injects the gtag script after the components mount, so the element is looked up when the first event needs it.
-    protected watchGtagScriptState(): void {
-        if (this.isGtagScriptWatched) {
-            return;
-        }
-
-        const script = document.querySelector<HTMLScriptElement>(`script[src="${this.gtagScriptSrc}"]`);
-
-        if (!script) {
-            return;
-        }
-
-        this.isGtagScriptWatched = true;
-
-        script.addEventListener(
-            'load',
-            () => {
-                this.isGtagScriptLoaded = true;
-            },
-            { once: true },
-        );
-
-        script.addEventListener(
-            'error',
-            () => {
-                this.isGtagScriptFailed = true;
-
-                for (const settle of this.pendingEventSettlers) {
-                    settle();
-                }
-            },
-            { once: true },
-        );
     }
 
     // One entry per product, concrete product and variant: lines of the same one are added up, so an item is never sent twice.
@@ -538,9 +563,9 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     protected searchEventHandler(data: SearchEventData): void {
         const { searchTerm, resultsCount } = data.eventDetail;
         const hasNoResults = resultsCount === 0 && searchTerm;
-        const eventName = hasNoResults ? 'zero_search_results' : 'search_results';
+        const eventName: SearchEventName = hasNoResults ? 'zero_search_results' : 'search_results';
 
-        if (!searchTerm) {
+        if (!searchTerm || !this.isGtagEventAllowed(eventName)) {
             return;
         }
 
