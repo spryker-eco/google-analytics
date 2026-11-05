@@ -70,7 +70,7 @@ With the cart async mode (`CartPageConfig::IS_CART_ACTIONS_ASYNC_MODE_ENABLED`),
 
 Outside the cart page, `add_to_cart` is sent when the customer clicks, before the shop confirms the change, whatever the cart mode. This covers adding from the product detail page and from product cards, moving wishlist items to the cart, adding from a shopping list, reordering, converting a quote request, the quick order, configurable bundles and product sets. An addition the shop rejects, e.g. for missing stock, a quantity rule or a cart locked for approval, is counted too, with the quantity the customer submitted: add-to-cart counts measure the customer's intent and can be slightly higher than what reached carts.
 
-A click that leaves the page waits until Google Analytics took the event, at most 0.5 s, and only while the gtag script is still loading.
+A click that leaves the page is never delayed. Once the gtag script runs, it sends every event with a request that outlives the page. An event raised while the script is still loading, e.g. on a slow connection, is kept in the session storage of the tab when the page is left and is sent by the next page, with the URL and title of the page it happened on; it is then recorded a moment later, after the page view of the next page. When the script fails to load, e.g. because a content blocker stopped it, the waiting events are dropped. The tab keeps at most the 50 newest waiting events, and drops an event it could not send within 30 minutes, as it would otherwise be recorded in another session. Where the session storage is switched off or full, the events waiting when the page is left are lost.
 
 ## Page URLs
 

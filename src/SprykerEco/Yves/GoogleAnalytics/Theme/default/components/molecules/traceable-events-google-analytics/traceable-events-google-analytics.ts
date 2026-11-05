@@ -8,6 +8,7 @@ import {
     EventsHandlerData,
     EventName,
 } from 'TraceableEventWidget/components/molecules/traceable-events-orchestrator/traceable-events-orchestrator';
+import { debug } from 'ShopUi/app/logger';
 
 declare global {
     interface SPRYKER_EVENTS {
@@ -117,6 +118,21 @@ const CAMPAIGN_QUERY_PARAMETERS: ReadonlySet<string> = new Set([
     'dclid',
     '_gl',
 ]);
+// An event raised while the gtag script is loading; `params` are its gtag event parameters, `raisedAt` when it was raised.
+interface PendingEvent {
+    name: string;
+    params: Record<string, unknown>;
+    raisedAt: number;
+}
+
+// The events a page could not send before it was left, kept in the session storage of the tab for the next page.
+const STORED_EVENTS_KEY = 'traceable-events-google-analytics:pending-events';
+// A tab whose gtag script never loads passes the events on from page to page; only the newest ones are kept.
+const MAX_STORED_EVENTS = 50;
+// An event the tab could not send for this long is dropped: sent later, it would land in another session and at another time.
+// 30 minutes.
+const MAX_PENDING_EVENT_AGE_MILLISECONDS = 1800000;
+
 // A quote request page has the quote request reference in its path, e.g. /quote-request/details/DE--21-8, and in its title. The
 // reference contains the customer reference, so it is left out of the page URLs and the title, for the agent's pages as well.
 const QUOTE_REQUEST_REFERENCE_PATH_PATTERN = /(\/quote-request\/[\w-]+\/)([^/]+)/;
@@ -124,11 +140,10 @@ const QUOTE_REQUEST_REFERENCE_PATH_PATTERN = /(\/quote-request\/[\w-]+\/)([^/]+)
 export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAdapter {
     protected currentStore = '';
     protected currentLocale = '';
-    // Settlers of events still waiting for Google Analytics; all run at once when the gtag script fails to load.
-    protected pendingEventSettlers = new Set<() => void>();
-    protected isGtagScriptLoaded = false;
-    protected isGtagScriptFailed = false;
-    protected isGtagScriptWatched = false;
+    // Events raised while the gtag script is loading, in the order they were raised.
+    protected pendingEvents: PendingEvent[] = [];
+    protected isGtagScriptLoading = true;
+    protected listenersController = new AbortController();
 
     override init(): void {
         const { appId, store, locale } = this.initialData;
@@ -150,7 +165,19 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         });
         window.gtag('config', appId);
 
+        // A running gtag script replaces the push method of the data layer with its own.
+        this.isGtagScriptLoading =
+            window.dataLayer.push === Array.prototype.push && !this.hasGtagScriptSettledWithoutRunning();
+        this.watchGtagScript();
+        this.sendStoredEvents();
+
         super.init();
+    }
+
+    override disconnectedCallback(): void {
+        this.listenersController.abort();
+
+        super.disconnectedCallback();
     }
 
     // Origin and path, and only the campaign query parameters; an empty or invalid URL, e.g. no referrer, stays empty.
@@ -254,15 +281,15 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         }
     }
 
-    protected addToCartHandler(data: CartEventData): Promise<void> {
-        return this.sendItemsEvent('add_to_cart', data.currency, data.products ?? []);
+    protected addToCartHandler(data: CartEventData): void {
+        this.sendItemsEvent('add_to_cart', data.currency, data.products ?? []);
     }
 
-    protected removeFromCartHandler(data: CartEventData): Promise<void> {
-        return this.sendItemsEvent('remove_from_cart', data.currency, data.products ?? []);
+    protected removeFromCartHandler(data: CartEventData): void {
+        this.sendItemsEvent('remove_from_cart', data.currency, data.products ?? []);
     }
 
-    protected cartQuantityChangeHandler(data: CartEventData): Promise<void> | void {
+    protected cartQuantityChangeHandler(data: CartEventData): void {
         const changedProduct = data.products?.[0];
         // Without the new quantity (null when the trigger finds no quantity input) the change is unknown, not a removal.
         const isNewQuantityKnown = changedProduct?.newQuantity !== null && changedProduct?.newQuantity !== undefined;
@@ -290,7 +317,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
 
         const differenceProduct = { ...changedProduct, quantity: Math.abs(quantityDifference) };
 
-        return this.sendItemsEvent(eventName, data.currency, [differenceProduct]);
+        this.sendItemsEvent(eventName, data.currency, [differenceProduct]);
     }
 
     protected cartItemsChangeHandler(data: CartItemsChangeData): void {
@@ -312,11 +339,11 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         currency: string,
         products: ProductDetails[],
         additionalParams: Record<string, unknown> = {},
-    ): Promise<void> {
+    ): void {
         const items = this.getItems(products);
 
         if (!items.length) {
-            return Promise.resolve();
+            return;
         }
 
         const eventParams: Record<string, unknown> = { ...additionalParams, currency, items };
@@ -327,73 +354,193 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             eventParams.value = value;
         }
 
-        return this.sendEvent(eventName, eventParams);
+        this.sendEvent(eventName, eventParams);
     }
 
-    protected sendEvent(eventName: ItemsEventName, eventParams: Record<string, unknown>): Promise<void> {
-        // Settles at once when nothing is gained by waiting: a loaded script sends the event with a keepalive request,
-        // which outlives a navigation, and a script that failed to load (e.g. a content blocker) can never send it.
-        // Only an event raised while the script is still loading sits in the data layer, which a navigation drops, so
-        // that one resolves once Google Analytics has handled it, so a page that is about to navigate can wait for it.
-        return new Promise((resolve) => {
-            this.watchGtagScriptState();
-
-            if (this.isGtagScriptLoaded || this.isGtagScriptFailed) {
-                window.gtag('event', eventName, eventParams);
-                resolve();
-
-                return;
-            }
-
-            const settle = (): void => {
-                window.clearTimeout(fallbackTimer);
-                this.pendingEventSettlers.delete(settle);
-                resolve();
-            };
-            const fallbackTimer = window.setTimeout(settle, this.gtagEventTimeout);
-
-            this.pendingEventSettlers.add(settle);
-
-            window.gtag('event', eventName, {
-                ...eventParams,
-                event_callback: settle,
-                event_timeout: this.gtagEventTimeout,
-            });
-        });
+    // A running gtag script sends the event with a beacon or keepalive request, which outlives a navigation. An event raised
+    // while the script is still loading is kept by this component instead of the data layer, which a navigation drops:
+    // it is sent once the script runs, or passed on to the next page of the tab when the page is left first.
+    protected sendEvent(eventName: string, eventParams: Record<string, unknown>): void {
+        this.queueEvent({ name: eventName, params: eventParams, raisedAt: Date.now() });
     }
 
-    // The script-loader next to this component injects the gtag script after the components mount, so the element is looked up when the first event needs it.
-    protected watchGtagScriptState(): void {
-        if (this.isGtagScriptWatched) {
+    // Sends the event, or keeps it while the gtag script is loading. An event taken back from the storage keeps the time it was
+    // raised, so it expires however often it is passed on.
+    protected queueEvent(pendingEvent: PendingEvent): void {
+        if (!this.isGtagScriptLoading) {
+            window.gtag('event', pendingEvent.name, pendingEvent.params);
+
             return;
         }
 
-        const script = document.querySelector<HTMLScriptElement>(`script[src="${this.gtagScriptSrc}"]`);
+        this.pendingEvents.push(pendingEvent);
+    }
 
-        if (!script) {
-            return;
+    // The script-loader finds a gtag script that is already in the DOM, e.g. added by another component, and does not add it again.
+    // When that script was fetched but never ran, e.g. it failed to load, no load or error event is left to wait for.
+    protected hasGtagScriptSettledWithoutRunning(): boolean {
+        const isGtagScriptInDom = Boolean(document.querySelector(`script[src="${this.gtagScriptSrc}"]`));
+        const isGtagScriptFetched = performance
+            .getEntriesByName(this.gtagScriptSrc)
+            .some((entry) => (entry as PerformanceResourceTiming).responseEnd > 0);
+
+        if (!isGtagScriptInDom || !isGtagScriptFetched) {
+            return false;
         }
 
-        this.isGtagScriptWatched = true;
-
-        script.addEventListener(
-            'load',
-            () => {
-                this.isGtagScriptLoaded = true;
-            },
-            { once: true },
+        debug(
+            `${this.name}: the gtag script was fetched before this component started but does not run; events are not sent`,
         );
 
-        script.addEventListener(
-            'error',
-            () => {
-                this.isGtagScriptFailed = true;
+        return true;
+    }
 
-                for (const settle of this.pendingEventSettlers) {
-                    settle();
-                }
-            },
-            { once: true },
+    // Load and error events do not bubble, so they are captured on the document. The script-loader next to this component
+    // injects the script while the components mount, so neither event can fire before this listens.
+    protected watchGtagScript(): void {
+        const { signal } = this.listenersController;
+
+        document.addEventListener('load', (event: Event) => this.onGtagScriptSettled(event, true), {
+            capture: true,
+            signal,
+        });
+        document.addEventListener('error', (event: Event) => this.onGtagScriptSettled(event, false), {
+            capture: true,
+            signal,
+        });
+        // A tab killed in the background, e.g. on a phone, may never fire pagehide, so the events are stored once the page is hidden.
+        // A page shown again, by the tab or from the back-forward cache, takes them back.
+        document.addEventListener('visibilitychange', () => this.onVisibilityChange(), { signal });
+        window.addEventListener('pagehide', () => this.storePendingEvents(), { signal });
+        window.addEventListener('pageshow', (event: PageTransitionEvent) => this.onPageShow(event), { signal });
+    }
+
+    protected onVisibilityChange(): void {
+        if (document.visibilityState === 'hidden') {
+            this.storePendingEvents();
+
+            return;
+        }
+
+        this.sendStoredEvents();
+    }
+
+    // A page the browser restores from the back-forward cache does not start again, so it takes back what it stored when it was left.
+    protected onPageShow(event: PageTransitionEvent): void {
+        if (!event.persisted) {
+            return;
+        }
+
+        this.sendStoredEvents();
+    }
+
+    protected onGtagScriptSettled(event: Event, isLoaded: boolean): void {
+        const isGtagScript =
+            event.target instanceof HTMLScriptElement && event.target.getAttribute('src') === this.gtagScriptSrc;
+
+        if (!isGtagScript || !this.isGtagScriptLoading) {
+            return;
+        }
+
+        const pendingEvents = this.pendingEvents;
+
+        this.isGtagScriptLoading = false;
+        this.pendingEvents = [];
+
+        // A script that failed to load, e.g. one a content blocker stopped, can never send them.
+        if (!isLoaded) {
+            return;
+        }
+
+        for (const { name, params } of pendingEvents) {
+            window.gtag('event', name, params);
+        }
+    }
+
+    // The events go with the page they happened on, as the next page sends them under its own URL otherwise.
+    protected storePendingEvents(): void {
+        if (!this.pendingEvents.length) {
+            return;
+        }
+
+        const pageParams = {
+            page_location: this.getUrlWithoutPersonalData(window.location.href),
+            page_title: this.getTitleWithoutPersonalData(document.title),
+        };
+        const pageEvents = this.pendingEvents.map(({ name, params, raisedAt }) => ({
+            name,
+            params: { ...pageParams, ...params },
+            raisedAt,
+        }));
+        // Added to what is stored already, e.g. by the same page when it was hidden before.
+        const storedEvents = [...this.readStoredEvents(), ...pageEvents].slice(-MAX_STORED_EVENTS);
+
+        // Taken off the page, so a page restored from the back-forward cache does not send them as well as the next page.
+        this.pendingEvents = [];
+
+        try {
+            window.sessionStorage.setItem(this.storedEventsKey, JSON.stringify(storedEvents));
+        } catch (error) {
+            // Storage that is switched off or full loses the events, as the navigation would; tracking never breaks the page.
+            debug(
+                `${this.name}: ${storedEvents.length} pending events are lost, the session storage refused them: ${error}`,
+            );
+        }
+    }
+
+    // Taken off the storage before they are sent, so every page sends them once at most.
+    protected sendStoredEvents(): void {
+        const storedEvents = this.readStoredEvents();
+
+        try {
+            window.sessionStorage.removeItem(this.storedEventsKey);
+        } catch {
+            // Storage that is switched off has nothing stored; readStoredEvents() already reported it.
+        }
+
+        const oldestRaisedAt = Date.now() - MAX_PENDING_EVENT_AGE_MILLISECONDS;
+        const currentEvents = storedEvents.filter((storedEvent) => storedEvent.raisedAt >= oldestRaisedAt);
+
+        if (currentEvents.length < storedEvents.length) {
+            debug(
+                `${this.name}: ${storedEvents.length - currentEvents.length} stored events are older than the maximum age and dropped`,
+            );
+        }
+
+        for (const storedEvent of currentEvents) {
+            this.queueEvent(storedEvent);
+        }
+    }
+
+    protected readStoredEvents(): PendingEvent[] {
+        let storedEvents: unknown;
+
+        try {
+            storedEvents = JSON.parse(window.sessionStorage.getItem(this.storedEventsKey));
+        } catch (error) {
+            // Storage that is switched off, or a value that is not JSON, has no events to send.
+            debug(`${this.name}: the stored events cannot be read: ${error}`);
+
+            return [];
+        }
+
+        if (!Array.isArray(storedEvents)) {
+            return [];
+        }
+
+        return storedEvents.filter((storedEvent: unknown): storedEvent is PendingEvent =>
+            this.isPendingEvent(storedEvent),
+        );
+    }
+
+    protected isPendingEvent(value: unknown): value is PendingEvent {
+        const pendingEvent = value as PendingEvent;
+
+        return (
+            typeof pendingEvent?.name === 'string' &&
+            typeof pendingEvent.params === 'object' &&
+            pendingEvent.params !== null &&
+            typeof pendingEvent.raisedAt === 'number'
         );
     }
 
@@ -494,7 +641,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             return;
         }
 
-        window.gtag('event', eventName, {
+        this.sendEvent(eventName, {
             search_term: searchTerm,
             event_category: 'Search results',
             event_label: hasNoResults ? 'No results' : 'Search results',
@@ -520,8 +667,9 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         return Math.round(Math.log10(this.pricePrecision));
     }
 
-    protected get gtagEventTimeout(): number {
-        return Number(this.getAttribute('gtag-event-timeout'));
+    // Per measurement ID, as another store of the same domain may report to another property.
+    protected get storedEventsKey(): string {
+        return `${STORED_EVENTS_KEY}:${this.initialData.appId}`;
     }
 
     protected get gtagScriptSrc(): string {
