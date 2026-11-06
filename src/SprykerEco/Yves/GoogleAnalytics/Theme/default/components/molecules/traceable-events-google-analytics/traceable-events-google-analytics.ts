@@ -96,9 +96,7 @@ interface GtagItem {
 type ItemsEventName = 'add_to_cart' | 'remove_from_cart';
 
 // The GA4 events a Back Office setting can switch off, in the order their handlers run when several listen to one storefront event.
-const GOOGLE_ANALYTICS_EVENT_NAMES = ['search', 'add_to_cart', 'remove_from_cart'] as const;
-
-type GoogleAnalyticsEventName = (typeof GOOGLE_ANALYTICS_EVENT_NAMES)[number];
+const GOOGLE_ANALYTICS_EVENT_NAMES: readonly string[] = ['search', 'add_to_cart', 'remove_from_cart'];
 
 // The query parameters Google Analytics reads for campaign attribution. Every other query parameter, and the fragment, is left out of
 // the page URLs sent with every hit, as they may carry personal data, e.g. the token of a password reset link.
@@ -190,10 +188,11 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             return '';
         }
 
+        const campaignQueryParameters = this.getCampaignQueryParameters();
         const campaignQuery = new URLSearchParams();
 
         for (const [name, value] of parsedUrl.searchParams) {
-            if (CAMPAIGN_QUERY_PARAMETERS.has(name)) {
+            if (campaignQueryParameters.has(name)) {
                 campaignQuery.append(name, value);
             }
         }
@@ -205,12 +204,12 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     }
 
     protected getPathWithoutQuoteRequestReference(path: string): string {
-        return path.replace(QUOTE_REQUEST_REFERENCE_PATH_PATTERN, '$1');
+        return path.replace(this.getQuoteRequestReferencePathPattern(), '$1');
     }
 
     // The title of a quote request page shows its reference, which the path of the page names.
     protected getTitleWithoutPersonalData(title: string): string {
-        const quoteRequestReferenceMatch = window.location.pathname.match(QUOTE_REQUEST_REFERENCE_PATH_PATTERN);
+        const quoteRequestReferenceMatch = window.location.pathname.match(this.getQuoteRequestReferencePathPattern());
 
         if (!quoteRequestReferenceMatch) {
             return title;
@@ -221,24 +220,37 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         return title.split(quoteRequestReference).join('').trim();
     }
 
+    // A project adds its own GA4 event here and maps its handlers in getHandlersByGoogleAnalyticsEvent().
+    protected getGoogleAnalyticsEventNames(): readonly string[] {
+        return GOOGLE_ANALYTICS_EVENT_NAMES;
+    }
+
+    protected getCampaignQueryParameters(): ReadonlySet<string> {
+        return CAMPAIGN_QUERY_PARAMETERS;
+    }
+
+    protected getQuoteRequestReferencePathPattern(): RegExp {
+        return QUOTE_REQUEST_REFERENCE_PATH_PATTERN;
+    }
+
     // Only the storefront events of the GA4 events switched on in the Back Office are listened to.
     override getHandlers(): Partial<TraceableEventHandlers> {
         const handlersByGoogleAnalyticsEvent = this.getHandlersByGoogleAnalyticsEvent();
         const handlers: Partial<TraceableEventHandlers> = {};
 
-        for (const googleAnalyticsEventName of GOOGLE_ANALYTICS_EVENT_NAMES) {
+        for (const googleAnalyticsEventName of this.getGoogleAnalyticsEventNames()) {
             if (!this.isEventEnabled(googleAnalyticsEventName)) {
                 continue;
             }
 
-            this.addHandlers(handlers, handlersByGoogleAnalyticsEvent[googleAnalyticsEventName]);
+            this.addHandlers(handlers, handlersByGoogleAnalyticsEvent[googleAnalyticsEventName] ?? {});
         }
 
         return handlers;
     }
 
     // The storefront events each GA4 event listens to. The entries are plain method references, so a handler that several GA4 events need is recognised and registered once.
-    protected getHandlersByGoogleAnalyticsEvent(): Record<GoogleAnalyticsEventName, Partial<TraceableEventHandlers>> {
+    protected getHandlersByGoogleAnalyticsEvent(): Record<string, Partial<TraceableEventHandlers>> {
         return {
             search: {
                 SEARCH_EVENT: [this.searchEventHandler],
@@ -346,8 +358,9 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             return;
         }
 
-        const eventParams: Record<string, unknown> = { ...additionalParams, currency, items };
+        // The value is calculated from the exact quantities, e.g. 1.5 m; only the item quantities GA4 receives are whole pieces.
         const value = this.getItemsValue(items);
+        const eventParams: Record<string, unknown> = { ...additionalParams, currency, items: this.getItemsInWholePieces(items) };
 
         // Without a price for every item (e.g. a guest who may not see prices) the value is left out, the event is still sent.
         if (value !== undefined) {
@@ -549,10 +562,8 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         const itemsByKey = new Map<string, GtagItem>();
 
         for (const product of products) {
-            const requestedQuantity = Number(product?.quantity ?? 1);
-            const isTrackable = Boolean(product?.sku) && requestedQuantity > 0;
-            // GA4 counts whole pieces; a quantity in a measurement unit, e.g. 1.5 m, is rounded and stays at least 1.
-            const quantity = Math.max(1, Math.round(requestedQuantity));
+            const quantity = Number(product?.quantity ?? 1);
+            const isTrackable = Boolean(product?.sku) && quantity > 0;
 
             if (!isTrackable) {
                 continue;
@@ -609,6 +620,11 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         return String(product.abstractName || product.name || itemId);
     }
 
+    // GA4 counts whole pieces; a quantity in a measurement unit, e.g. 1.5 m, is rounded and stays at least 1.
+    protected getItemsInWholePieces(items: GtagItem[]): GtagItem[] {
+        return items.map((item) => ({ ...item, quantity: Math.max(1, Math.round(item.quantity)) }));
+    }
+
     protected getItemsValue(items: GtagItem[]): number | undefined {
         let value = 0;
 
@@ -652,7 +668,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     }
 
     // An event missing from the map stays on, so tracking keeps working while the configuration schema is not synced yet.
-    protected isEventEnabled(eventName: GoogleAnalyticsEventName): boolean {
+    protected isEventEnabled(eventName: string): boolean {
         const isEventDisabled = this.initialData.events[eventName] === false;
 
         return !isEventDisabled;

@@ -10,6 +10,8 @@ Provides Google Analytics 4 (GA4) integration for Spryker. Tracks storefront sea
 composer require spryker-eco/google-analytics
 ```
 
+The ecommerce events report a product by its abstract product SKU and name. The storefront reads them from the product storage, so no republishing is needed after the upgrade. Cart lines and order items carry them only when the project registers `ProductCartPlugin` (`spryker/product-cart-connector`) in `CartDependencyProvider::getExpanderPlugins()` and `ProductIdOrderItemExpanderPlugin` (`spryker/sales-product-connector`) in `SalesDependencyProvider::getOrderItemExpanderPlugins()`; without them, those items are reported by their concrete product SKU and without an abstract name.
+
 ## Upgrading from 1.4.0
 
 The Back Office setting key `search_event_ebabled` is renamed to `search_event_enabled`. A value stored under the old key is not read any more, so Search event tracking falls back to its default (disabled) after the upgrade.
@@ -25,12 +27,6 @@ If Search tracking was enabled before the upgrade:
    ```
 
 2. Re-save any Google Analytics setting in the Back Office once for each scope that held the value (global, and each store with an override). Saving rebuilds the storefront configuration storage of that scope from the renamed rows.
-
-The ecommerce events report a product by its abstract product SKU, which the product concrete storage data of `spryker/product-storage` carries as `abstractSku`. Products published before the upgrade do not have it until they are published again, and until then they are reported with their concrete product SKU as `item_id`. Republish them once after the upgrade:
-
-```bash
-vendor/bin/console publish:trigger-events -r product_concrete
-```
 
 ## Features
 
