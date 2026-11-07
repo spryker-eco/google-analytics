@@ -41,12 +41,10 @@
     'traceable-adapter': true,
     'data-gtag-script-src': "https://www.googletagmanager.com/gtag/js?id=#{data.gtagId}",
     'price-precision': constant('Spryker\\Shared\\Money\\Converter\\IntegerToDecimalConverter::PRICE_PRECISION'),
-    'gtag-event-timeout': 2000,
 } %}
 
 {#
     price-precision - storefront prices are integers of this many parts per currency unit, as Money stores them.
-    gtag-event-timeout - milliseconds an event may wait for Google Analytics to confirm it, enough for a cold script load; a page about to navigate waits no longer.
 #}
 
 {% block component %}
