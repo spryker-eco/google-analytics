@@ -93,8 +93,6 @@ interface GtagItem {
     quantity: number;
 }
 
-type ItemsEventName = 'add_to_cart' | 'remove_from_cart';
-
 // The GA4 events a Back Office setting can switch off, in the order their handlers run when several listen to one storefront event.
 const GOOGLE_ANALYTICS_EVENT_NAMES: readonly string[] = ['search', 'add_to_cart', 'remove_from_cart'];
 
@@ -138,16 +136,28 @@ const QUOTE_REQUEST_REFERENCE_PATH_PATTERN = /(\/quote-request\/[\w-]+\/)([^/]+)
 export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAdapter {
     protected currentStore = '';
     protected currentLocale = '';
+    // The attributes are read once in init(), as the handlers need them for every event and every item.
+    protected appId = '';
+    protected enabledEvents: EnabledEvents = {};
+    // The parts per currency unit of a price in cents, e.g. 100, and the decimals a price in currency units has, e.g. 2.
+    protected pricePrecision = 1;
+    protected priceDecimals = 0;
     // Events raised while the gtag script is loading, in the order they were raised.
     protected pendingEvents: PendingEvent[] = [];
     protected isGtagScriptLoading = true;
     protected listenersController = new AbortController();
+    // Stops the load and error listeners once the gtag script has settled, so the page's other resources do not go through them.
+    protected gtagScriptListenersController = new AbortController();
 
     override init(): void {
-        const { appId, store, locale } = this.initialData;
+        const { appId, store, locale, events } = this.initialData;
 
+        this.appId = appId;
         this.currentStore = store;
         this.currentLocale = locale;
+        this.enabledEvents = events;
+        this.pricePrecision = Number(this.getAttribute('price-precision'));
+        this.priceDecimals = Math.round(Math.log10(this.pricePrecision));
 
         window.dataLayer = window.dataLayer || [];
         window.gtag = function gtag(): void {
@@ -161,12 +171,15 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             page_referrer: this.getUrlWithoutPersonalData(document.referrer),
             page_title: this.getTitleWithoutPersonalData(document.title),
         });
-        window.gtag('config', appId);
+        window.gtag('config', this.appId);
 
-        // A running gtag script replaces the push method of the data layer with its own.
-        this.isGtagScriptLoading =
-            window.dataLayer.push === Array.prototype.push && !this.hasGtagScriptSettledWithoutRunning();
-        this.watchGtagScript();
+        this.isGtagScriptLoading = !this.isGtagScriptRunning() && !this.hasGtagScriptSettledWithoutRunning();
+        this.watchPage();
+
+        if (this.isGtagScriptLoading) {
+            this.watchGtagScript();
+        }
+
         this.sendStoredEvents();
 
         super.init();
@@ -174,6 +187,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
 
     override disconnectedCallback(): void {
         this.listenersController.abort();
+        this.gtagScriptListenersController.abort();
 
         super.disconnectedCallback();
     }
@@ -231,6 +245,14 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
 
     protected getQuoteRequestReferencePathPattern(): RegExp {
         return QUOTE_REQUEST_REFERENCE_PATH_PATTERN;
+    }
+
+    protected getMaxStoredEvents(): number {
+        return MAX_STORED_EVENTS;
+    }
+
+    protected getMaxPendingEventAgeMilliseconds(): number {
+        return MAX_PENDING_EVENT_AGE_MILLISECONDS;
     }
 
     // Only the storefront events of the GA4 events switched on in the Back Office are listened to.
@@ -317,7 +339,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             return;
         }
 
-        let eventName: ItemsEventName = 'remove_from_cart';
+        let eventName = 'remove_from_cart';
 
         if (quantityDifference > 0) {
             eventName = 'add_to_cart';
@@ -346,8 +368,9 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         }
     }
 
+    // Builds the items, value and currency of any GA4 ecommerce event, e.g. a project's begin_checkout.
     protected sendItemsEvent(
-        eventName: ItemsEventName,
+        eventName: string,
         currency: string,
         products: ProductDetails[],
         additionalParams: Record<string, unknown> = {},
@@ -389,15 +412,26 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         this.pendingEvents.push(pendingEvent);
     }
 
+    // A running gtag script replaces the push method of the data layer with its own.
+    protected isGtagScriptRunning(): boolean {
+        return window.dataLayer.push !== Array.prototype.push;
+    }
+
+    protected isGtagScriptInDom(): boolean {
+        return Boolean(document.querySelector(`script[src="${this.gtagScriptSrc}"]`));
+    }
+
     // The script-loader finds a gtag script that is already in the DOM, e.g. added by another component, and does not add it again.
-    // When that script was fetched but never ran, e.g. it failed to load, no load or error event is left to wait for.
+    // When that script was fetched but never ran, e.g. it failed to load, no load or error event is left to wait for. A script a
+    // content blocker stopped may leave no resource timing entry, but the page load waits for every script in the DOM, so a
+    // script that does not run once the page has loaded never will.
     protected hasGtagScriptSettledWithoutRunning(): boolean {
-        const isGtagScriptInDom = Boolean(document.querySelector(`script[src="${this.gtagScriptSrc}"]`));
         const isGtagScriptFetched = performance
             .getEntriesByName(this.gtagScriptSrc)
             .some((entry) => (entry as PerformanceResourceTiming).responseEnd > 0);
+        const hasGtagScriptSettled = isGtagScriptFetched || document.readyState === 'complete';
 
-        if (!isGtagScriptInDom || !isGtagScriptFetched) {
+        if (!this.isGtagScriptInDom() || !hasGtagScriptSettled) {
             return false;
         }
 
@@ -409,9 +443,10 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     }
 
     // Load and error events do not bubble, so they are captured on the document. The script-loader next to this component
-    // injects the script while the components mount, so neither event can fire before this listens.
+    // injects the script while the components mount, so neither event can fire before this listens. A script that was already
+    // in the DOM may have failed before; the page load, which waits for it, tells.
     protected watchGtagScript(): void {
-        const { signal } = this.listenersController;
+        const { signal } = this.gtagScriptListenersController;
 
         document.addEventListener('load', (event: Event) => this.onGtagScriptSettled(event, true), {
             capture: true,
@@ -421,6 +456,12 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             capture: true,
             signal,
         });
+        window.addEventListener('load', () => this.onPageLoaded(), { signal });
+    }
+
+    protected watchPage(): void {
+        const { signal } = this.listenersController;
+
         // A tab killed in the background, e.g. on a phone, may never fire pagehide, so the events are stored once the page is hidden.
         // A page shown again, by the tab or from the back-forward cache, takes them back.
         document.addEventListener('visibilitychange', () => this.onVisibilityChange(), { signal });
@@ -451,7 +492,25 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         const isGtagScript =
             event.target instanceof HTMLScriptElement && event.target.getAttribute('src') === this.gtagScriptSrc;
 
-        if (!isGtagScript || !this.isGtagScriptLoading) {
+        if (!isGtagScript) {
+            return;
+        }
+
+        this.settleGtagScript(isLoaded);
+    }
+
+    protected onPageLoaded(): void {
+        if (!this.isGtagScriptInDom() || this.isGtagScriptRunning()) {
+            return;
+        }
+
+        debug(`${this.name}: the gtag script does not run after the page has loaded; events are not sent`);
+
+        this.settleGtagScript(false);
+    }
+
+    protected settleGtagScript(isLoaded: boolean): void {
+        if (!this.isGtagScriptLoading) {
             return;
         }
 
@@ -459,6 +518,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
 
         this.isGtagScriptLoading = false;
         this.pendingEvents = [];
+        this.gtagScriptListenersController.abort();
 
         // A script that failed to load, e.g. one a content blocker stopped, can never send them.
         if (!isLoaded) {
@@ -486,7 +546,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             raisedAt,
         }));
         // Added to what is stored already, e.g. by the same page when it was hidden before.
-        const storedEvents = [...this.readStoredEvents(), ...pageEvents].slice(-MAX_STORED_EVENTS);
+        const storedEvents = [...this.readStoredEvents(), ...pageEvents].slice(-this.getMaxStoredEvents());
 
         // Taken off the page, so a page restored from the back-forward cache does not send them as well as the next page.
         this.pendingEvents = [];
@@ -511,7 +571,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             // Storage that is switched off has nothing stored; readStoredEvents() already reported it.
         }
 
-        const oldestRaisedAt = Date.now() - MAX_PENDING_EVENT_AGE_MILLISECONDS;
+        const oldestRaisedAt = Date.now() - this.getMaxPendingEventAgeMilliseconds();
         const currentEvents = storedEvents.filter((storedEvent) => storedEvent.raisedAt >= oldestRaisedAt);
 
         if (currentEvents.length < storedEvents.length) {
@@ -669,23 +729,14 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
 
     // An event missing from the map stays on, so tracking keeps working while the configuration schema is not synced yet.
     protected isEventEnabled(eventName: string): boolean {
-        const isEventDisabled = this.initialData.events[eventName] === false;
+        const isEventDisabled = this.enabledEvents[eventName] === false;
 
         return !isEventDisabled;
     }
 
-    protected get pricePrecision(): number {
-        return Number(this.getAttribute('price-precision'));
-    }
-
-    // The decimals a price in currency units has, e.g. 2 for a precision of 100.
-    protected get priceDecimals(): number {
-        return Math.round(Math.log10(this.pricePrecision));
-    }
-
     // Per measurement ID, as another store of the same domain may report to another property.
     protected get storedEventsKey(): string {
-        return `${STORED_EVENTS_KEY}:${this.initialData.appId}`;
+        return `${STORED_EVENTS_KEY}:${this.appId}`;
     }
 
     protected get gtagScriptSrc(): string {
