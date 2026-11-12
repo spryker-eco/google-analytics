@@ -9,6 +9,7 @@ import {
     EventName,
 } from 'TraceableEventWidget/components/molecules/traceable-events-orchestrator/traceable-events-orchestrator';
 import { debug } from 'ShopUi/app/logger';
+import { getCategoryLevels, ProductCategory } from './category-levels';
 
 declare global {
     interface SPRYKER_EVENTS {
@@ -71,10 +72,6 @@ interface ProductDetails {
     price?: number;
     quantity?: number;
     newQuantity?: number;
-}
-
-interface ProductCategory {
-    name: string;
 }
 
 interface CartEventData extends EventsHandlerData<EventName> {
@@ -150,14 +147,6 @@ const MAX_PENDING_EVENT_AGE_MILLISECONDS = 1800000;
 const QUOTE_REQUEST_REFERENCE_PATH_PATTERN = /(\/quote-request\/[\w-]+\/)([^/]+)/;
 // GA4 reports a variant as one string, e.g. "Red / 64 GB".
 const VARIANT_VALUE_SEPARATOR = ' / ';
-// GA4 item category levels, from the top-level category down.
-const CATEGORY_LEVEL_KEYS = [
-    'item_category',
-    'item_category2',
-    'item_category3',
-    'item_category4',
-    'item_category5',
-] as const;
 
 export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAdapter {
     protected currentStore = '';
@@ -700,17 +689,9 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         return (variantValues ?? []).map(String).join(VARIANT_VALUE_SEPARATOR);
     }
 
-    // The categories arrive top level first, e.g. Computer > Pc's/Workstations; GA4 has at most five levels, so deeper ones are left out.
+    // At most five levels, top level first; see getCategoryLevels().
     protected addCategoryLevels(item: GtagItem, categories: ProductCategory[]): void {
-        // A category without a name is left out, so the next one takes its level and no level is sent empty.
-        const categoryNames = categories
-            .map((category) => String(category?.name ?? ''))
-            .filter((categoryName) => categoryName !== '');
-        const levelCount = Math.min(categoryNames.length, CATEGORY_LEVEL_KEYS.length);
-
-        for (let level = 0; level < levelCount; level++) {
-            item[CATEGORY_LEVEL_KEYS[level]] = categoryNames[level];
-        }
+        Object.assign(item, getCategoryLevels(categories));
     }
 
     protected getConcreteSku(product: ProductDetails, abstractSku: string): string {
