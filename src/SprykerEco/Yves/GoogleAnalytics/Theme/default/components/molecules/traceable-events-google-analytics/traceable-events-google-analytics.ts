@@ -700,12 +700,16 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         return (variantValues ?? []).map(String).join(VARIANT_VALUE_SEPARATOR);
     }
 
-    // The categories arrive top level first, e.g. Computer > Pc's/Workstations; GA4 has at most five levels.
+    // The categories arrive top level first, e.g. Computer > Pc's/Workstations; GA4 has at most five levels, so deeper ones are left out.
     protected addCategoryLevels(item: GtagItem, categories: ProductCategory[]): void {
-        const levelCount = Math.min(categories.length, CATEGORY_LEVEL_KEYS.length);
+        // A category without a name is left out, so the next one takes its level and no level is sent empty.
+        const categoryNames = categories
+            .map((category) => String(category?.name ?? ''))
+            .filter((categoryName) => categoryName !== '');
+        const levelCount = Math.min(categoryNames.length, CATEGORY_LEVEL_KEYS.length);
 
         for (let level = 0; level < levelCount; level++) {
-            item[CATEGORY_LEVEL_KEYS[level]] = categories[level].name;
+            item[CATEGORY_LEVEL_KEYS[level]] = categoryNames[level];
         }
     }
 
@@ -751,11 +755,16 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
 
     // Storefront emitters send prices in cents; the price-precision attribute holds the parts per currency unit.
     protected getPrice(price: unknown): number | undefined {
-        if (typeof price !== 'number') {
+        const pricePrecision = this.pricePrecision;
+        // Without a usable precision the price cannot be converted; the event is then sent without a price, not broken.
+        const isPriceKnown = typeof price === 'number' && Number.isFinite(price);
+        const isPricePrecisionUsable = Number.isFinite(pricePrecision) && pricePrecision > 0;
+
+        if (!isPriceKnown || !isPricePrecisionUsable) {
             return undefined;
         }
 
-        return Number((price / this.pricePrecision).toFixed(this.priceDecimals));
+        return Number((price / pricePrecision).toFixed(this.priceDecimals));
     }
 
     protected searchEventHandler(data: SearchEventData): void {
