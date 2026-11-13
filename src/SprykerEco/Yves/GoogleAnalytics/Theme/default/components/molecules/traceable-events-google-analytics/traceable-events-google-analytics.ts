@@ -9,7 +9,7 @@ import {
     EventName,
 } from 'TraceableEventWidget/components/molecules/traceable-events-orchestrator/traceable-events-orchestrator';
 import { debug } from 'ShopUi/app/logger';
-import { getCategoryLevels, ProductCategory } from './category-levels';
+import { CATEGORY_LEVEL_KEYS, CategoryLevelKey, getCategoryLevels, ProductCategory } from './category-levels';
 
 declare global {
     interface SPRYKER_EVENTS {
@@ -268,6 +268,16 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
 
     protected getMaxPendingEventAgeMilliseconds(): number {
         return MAX_PENDING_EVENT_AGE_MILLISECONDS;
+    }
+
+    // A project may join the variant values differently, e.g. with ', '.
+    protected getVariantValueSeparator(): string {
+        return VARIANT_VALUE_SEPARATOR;
+    }
+
+    // A project may report fewer category levels, e.g. the first three keys.
+    protected getCategoryLevelKeys(): readonly CategoryLevelKey[] {
+        return CATEGORY_LEVEL_KEYS;
     }
 
     // Only the storefront events of the GA4 events switched on in the Back Office are listened to.
@@ -685,13 +695,18 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         return Array.from(itemsByKey.values());
     }
 
-    protected getVariant(variantValues: string[] | undefined): string {
-        return (variantValues ?? []).map(String).join(VARIANT_VALUE_SEPARATOR);
+    // A template may send the variant as one string, e.g. "Red / 64 GB", instead of its values; it is reported as it is.
+    protected getVariant(variant: unknown): string {
+        if (Array.isArray(variant)) {
+            return variant.map(String).join(this.getVariantValueSeparator());
+        }
+
+        return String(variant ?? '');
     }
 
-    // At most five levels, top level first; see getCategoryLevels().
+    // One level per key of getCategoryLevelKeys(), top level first; see getCategoryLevels().
     protected addCategoryLevels(item: GtagItem, categories: ProductCategory[]): void {
-        Object.assign(item, getCategoryLevels(categories));
+        Object.assign(item, getCategoryLevels(categories, this.getCategoryLevelKeys()));
     }
 
     protected getConcreteSku(product: ProductDetails, abstractSku: string): string {

@@ -14,17 +14,25 @@ export interface ProductCategory {
     name: string;
 }
 
-// The categories arrive top level first, e.g. Computer > Pc's/Workstations; GA4 has at most five levels, so deeper ones are left out.
+// The categories arrive top level first, e.g. Computer > Pc's/Workstations; one level per key, so deeper ones are left out.
 // A category without a name is left out, so the next one takes its level and no level is sent empty.
-export const getCategoryLevels = (categories: ProductCategory[]): Partial<Record<CategoryLevelKey, string>> => {
+// A project that reports fewer levels passes fewer keys, e.g. the first three.
+export const getCategoryLevels = (
+    categories: unknown,
+    categoryLevelKeys: readonly CategoryLevelKey[] = CATEGORY_LEVEL_KEYS,
+): Partial<Record<CategoryLevelKey, string>> => {
+    if (!Array.isArray(categories)) {
+        return {};
+    }
+
     const categoryNames = categories
-        .map((category) => String(category?.name ?? ''))
+        .map((category: Partial<ProductCategory> | null | undefined) => String(category?.name ?? ''))
         .filter((categoryName) => categoryName !== '');
-    const levelCount = Math.min(categoryNames.length, CATEGORY_LEVEL_KEYS.length);
+    const levelCount = Math.min(categoryNames.length, categoryLevelKeys.length);
     const categoryLevels: Partial<Record<CategoryLevelKey, string>> = {};
 
     for (let level = 0; level < levelCount; level++) {
-        categoryLevels[CATEGORY_LEVEL_KEYS[level]] = categoryNames[level];
+        categoryLevels[categoryLevelKeys[level]] = categoryNames[level];
     }
 
     return categoryLevels;
