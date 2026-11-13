@@ -14,6 +14,8 @@ The ecommerce events report a product by its abstract product SKU and name. The 
 
 ## Upgrading from 1.4.0
 
+Run `vendor/bin/console configuration:sync` after the update, so the Back Office shows the new event settings (Add to Cart, Remove from Cart) and the renamed Search setting. An event whose setting is not synced yet is not tracked, like the setting's default; switch the events you want on in the Back Office.
+
 The Back Office setting key `search_event_ebabled` is renamed to `search_event_enabled`. A value stored under the old key is not read any more, so Search event tracking falls back to its default (disabled) after the upgrade.
 
 If Search tracking was enabled before the upgrade:
@@ -27,6 +29,13 @@ If Search tracking was enabled before the upgrade:
    ```
 
 2. Re-save any Google Analytics setting in the Back Office once for each scope that held the value (global, and each store with an override). Saving rebuilds the storefront configuration storage of that scope from the renamed rows.
+
+The page URL and the referrer URL that gtag sends with every hit (`page_location`, `page_referrer`) keep only the campaign query parameters after the upgrade; before, gtag sent the URL as it was. Every other query parameter, e.g. `q`, `category` or `sort`, is left out, as it may carry personal data (see [Page URLs](#page-urls)).
+
+If GA4 reports, explorations or audiences of the project filter on such a parameter:
+
+- They receive no values for it after the upgrade. GA4 Enhanced Measurement site search, which reads the search term from `q`, reports nothing; the module reports searches with its own `search_results` and `zero_search_results` events instead.
+- To keep a parameter, register `GoogleAnalyticsWidget` and return the parameter from `GoogleAnalyticsConfig::getAdditionalPageUrlQueryParameters()` in the project, see [Page URLs](#page-urls). Keep only parameters that never carry personal data. With `q` kept, Enhanced Measurement site search reports searches again, next to the module's search events.
 
 ## Features
 
@@ -71,3 +80,24 @@ A click that leaves the page is never delayed. Once the gtag script runs, it sen
 ## Page URLs
 
 gtag sends the page URL and the referrer URL with every hit, including the `page_view` it sends on every page by default. The module sends them with the origin, the path and only the campaign query parameters GA4 reads for attribution: `utm_*`, `gclid`, `gbraid`, `wbraid`, `dclid` and `_gl`. Every other query parameter and the fragment are left out, as they may carry personal data, e.g. the token of a password reset link. On quote request pages, of the customer and of the agent, the quote request reference is also left out of the path and of the page title, e.g. `/quote-request/details/DE--21-8` is sent as `/quote-request/details/`, as the reference contains the customer reference. GA4 Enhanced Measurement site search, which reads the search term from the URL, therefore reports nothing; the module sends its own `search_results` and `zero_search_results` events.
+
+To keep more query parameters, register `\SprykerEco\Yves\GoogleAnalytics\Widget\GoogleAnalyticsWidget` in `ShopApplicationDependencyProvider::getGlobalWidgets()` and override `getAdditionalPageUrlQueryParameters()` in the project's `Pyz\Yves\GoogleAnalytics\GoogleAnalyticsConfig`, which extends `\SprykerEco\Yves\GoogleAnalytics\GoogleAnalyticsConfig`. Return only parameters that never carry personal data:
+
+```php
+namespace Pyz\Yves\GoogleAnalytics;
+
+use SprykerEco\Yves\GoogleAnalytics\GoogleAnalyticsConfig as SprykerEcoGoogleAnalyticsConfig;
+
+class GoogleAnalyticsConfig extends SprykerEcoGoogleAnalyticsConfig
+{
+    /**
+     * @return list<string>
+     */
+    public function getAdditionalPageUrlQueryParameters(): array
+    {
+        return ['sort'];
+    }
+}
+```
+
+Without the widget, only the campaign parameters are kept.

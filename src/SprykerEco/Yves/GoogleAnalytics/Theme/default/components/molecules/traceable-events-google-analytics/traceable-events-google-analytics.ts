@@ -142,6 +142,8 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     // The parts per currency unit of a price in cents, e.g. 100, and the decimals a price in currency units has, e.g. 2.
     protected pricePrecision = 1;
     protected priceDecimals = 0;
+    // The query parameters a project keeps in the page URLs besides the campaign ones, set in GoogleAnalyticsConfig.
+    protected additionalPageUrlQueryParameters: string[] = [];
     // Events raised while the gtag script is loading, in the order they were raised.
     protected pendingEvents: PendingEvent[] = [];
     protected isGtagScriptLoading = true;
@@ -158,6 +160,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         this.enabledEvents = events;
         this.pricePrecision = Number(this.getAttribute('price-precision'));
         this.priceDecimals = Math.round(Math.log10(this.pricePrecision));
+        this.additionalPageUrlQueryParameters = this.readAdditionalPageUrlQueryParameters();
 
         window.dataLayer = window.dataLayer || [];
         window.gtag = function gtag(): void {
@@ -202,16 +205,16 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             return '';
         }
 
-        const campaignQueryParameters = this.getCampaignQueryParameters();
-        const campaignQuery = new URLSearchParams();
+        const keptQueryParameters = this.getPageUrlQueryParameters();
+        const keptQuery = new URLSearchParams();
 
         for (const [name, value] of parsedUrl.searchParams) {
-            if (campaignQueryParameters.has(name)) {
-                campaignQuery.append(name, value);
+            if (keptQueryParameters.has(name)) {
+                keptQuery.append(name, value);
             }
         }
 
-        const query = campaignQuery.toString();
+        const query = keptQuery.toString();
         const path = this.getPathWithoutQuoteRequestReference(parsedUrl.pathname);
 
         return query ? `${parsedUrl.origin}${path}?${query}` : `${parsedUrl.origin}${path}`;
@@ -241,6 +244,22 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
 
     protected getCampaignQueryParameters(): ReadonlySet<string> {
         return CAMPAIGN_QUERY_PARAMETERS;
+    }
+
+    // The campaign parameters and the ones the project keeps besides them, see GoogleAnalyticsConfig::getAdditionalPageUrlQueryParameters().
+    protected getPageUrlQueryParameters(): ReadonlySet<string> {
+        return new Set([...this.getCampaignQueryParameters(), ...this.additionalPageUrlQueryParameters]);
+    }
+
+    // A malformed or missing attribute keeps only the campaign parameters, so no other parameter is sent by mistake.
+    protected readAdditionalPageUrlQueryParameters(): string[] {
+        try {
+            const parameters: unknown = JSON.parse(this.getAttribute('page-url-query-parameters') ?? '[]');
+
+            return Array.isArray(parameters) ? parameters.map(String) : [];
+        } catch {
+            return [];
+        }
     }
 
     protected getQuoteRequestReferencePathPattern(): RegExp {
@@ -562,13 +581,20 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     }
 
     // Taken off the storage before they are sent, so every page sends them once at most.
+    // Runs on every page load and tab focus; with nothing stored, the usual case, it only reads the storage once.
     protected sendStoredEvents(): void {
-        const storedEvents = this.readStoredEvents();
+        const storedEventsJson = this.readStoredEventsJson();
+
+        if (storedEventsJson === null) {
+            return;
+        }
+
+        const storedEvents = this.parseStoredEvents(storedEventsJson);
 
         try {
             window.sessionStorage.removeItem(this.storedEventsKey);
         } catch {
-            // Storage that is switched off has nothing stored; readStoredEvents() already reported it.
+            // Storage that is switched off has nothing stored; readStoredEventsJson() already reported it.
         }
 
         const oldestRaisedAt = Date.now() - this.getMaxPendingEventAgeMilliseconds();
@@ -586,12 +612,29 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     }
 
     protected readStoredEvents(): PendingEvent[] {
+        const storedEventsJson = this.readStoredEventsJson();
+
+        return storedEventsJson === null ? [] : this.parseStoredEvents(storedEventsJson);
+    }
+
+    // Null when nothing is stored, or when the storage is switched off.
+    protected readStoredEventsJson(): string | null {
+        try {
+            return window.sessionStorage.getItem(this.storedEventsKey);
+        } catch (error) {
+            debug(`${this.name}: the stored events cannot be read: ${error}`);
+
+            return null;
+        }
+    }
+
+    protected parseStoredEvents(storedEventsJson: string): PendingEvent[] {
         let storedEvents: unknown;
 
         try {
-            storedEvents = JSON.parse(window.sessionStorage.getItem(this.storedEventsKey));
+            storedEvents = JSON.parse(storedEventsJson);
         } catch (error) {
-            // Storage that is switched off, or a value that is not JSON, has no events to send.
+            // A value that is not JSON has no events to send; sendStoredEvents() removes it.
             debug(`${this.name}: the stored events cannot be read: ${error}`);
 
             return [];
@@ -727,11 +770,9 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         });
     }
 
-    // An event missing from the map stays on, so tracking keeps working while the configuration schema is not synced yet.
+    // An event missing from the map, e.g. before `configuration:sync` adds its setting, is off, like the setting's Back Office default.
     protected isEventEnabled(eventName: string): boolean {
-        const isEventDisabled = this.enabledEvents[eventName] === false;
-
-        return !isEventDisabled;
+        return this.enabledEvents[eventName] === true;
     }
 
     // Per measurement ID, as another store of the same domain may report to another property.
