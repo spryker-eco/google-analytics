@@ -9,6 +9,7 @@ import {
     EventName,
 } from 'TraceableEventWidget/components/molecules/traceable-events-orchestrator/traceable-events-orchestrator';
 import { debug } from 'ShopUi/app/logger';
+import { CATEGORY_LEVEL_KEYS, CategoryLevelKey, getCategoryLevels, ProductCategory } from './category-levels';
 
 declare global {
     interface SPRYKER_EVENTS {
@@ -55,7 +56,7 @@ interface SearchEventData extends EventsHandlerData<EventName> {
 // A product as the storefront triggers send it; `price` is in cents, `newQuantity` is set when a cart line quantity changes.
 interface ProductDetails {
     sku: string;
-    // The SKU of the abstract product, sent as item_id, so every step of the funnel reports a product under the same id.
+    // The SKU of the abstract product, sent as item_id, so every step of the funnel reports a product under the same id; variants differ by item_variant.
     abstractSku?: string;
     // The SKU of the concrete product, sent by a trigger whose `sku` may stand for something else, e.g. a product card of a product
     // with several variants, which sends an empty one; without it, `sku` is concrete when it differs from the abstract product SKU.
@@ -63,6 +64,11 @@ interface ProductDetails {
     // The product's own name, e.g. of a concrete product "Galaxy Tab A 32 GB", and the name of its abstract product; a variant may have a name of its own.
     name?: string;
     abstractName?: string;
+    brand?: string;
+    // The values of the attributes the variants of the product differ in, ordered by attribute key, e.g. ['Red', '64 GB'].
+    variant?: string[];
+    // One category path of the product, top level first, picked by the same rule on the product page and in the cart.
+    categories?: ProductCategory[];
     price?: number;
     quantity?: number;
     newQuantity?: number;
@@ -86,6 +92,13 @@ interface CartItemsChangeData extends EventsHandlerData<EventName> {
 interface GtagItem {
     item_id: string;
     item_name: string;
+    item_brand?: string;
+    item_category?: string;
+    item_category2?: string;
+    item_category3?: string;
+    item_category4?: string;
+    item_category5?: string;
+    item_variant?: string;
     // A custom item parameter: the SKU of the concrete product, where the event knows it, e.g. in the cart; a product list card of a product
     // with several variants has none. Merchants register it as an item-scoped custom dimension to report by concrete product.
     concrete_sku?: string;
@@ -132,6 +145,8 @@ const MAX_PENDING_EVENT_AGE_MILLISECONDS = 1800000;
 // A quote request page has the quote request reference in its path, e.g. /quote-request/details/DE--21-8, and in its title. The
 // reference contains the customer reference, so it is left out of the page URLs and the title, for the agent's pages as well.
 const QUOTE_REQUEST_REFERENCE_PATH_PATTERN = /(\/quote-request\/[\w-]+\/)([^/]+)/;
+// GA4 reports a variant as one string, e.g. "Red / 64 GB".
+const VARIANT_VALUE_SEPARATOR = ' / ';
 
 export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAdapter {
     protected currentStore = '';
@@ -272,6 +287,16 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
 
     protected getMaxPendingEventAgeMilliseconds(): number {
         return MAX_PENDING_EVENT_AGE_MILLISECONDS;
+    }
+
+    // A project may join the variant values differently, e.g. with ', '.
+    protected getVariantValueSeparator(): string {
+        return VARIANT_VALUE_SEPARATOR;
+    }
+
+    // A project may report fewer category levels, e.g. the first three keys.
+    protected getCategoryLevelKeys(): readonly CategoryLevelKey[] {
+        return CATEGORY_LEVEL_KEYS;
     }
 
     // Only the storefront events of the GA4 events switched on in the Back Office are listened to.
@@ -660,7 +685,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         );
     }
 
-    // One entry per product and concrete product: lines of the same one are added up, so an item is never sent twice.
+    // One entry per product, concrete product and variant: lines of the same one are added up, so an item is never sent twice.
     protected getItems(products: ProductDetails[]): GtagItem[] {
         const itemsByKey = new Map<string, GtagItem>();
 
@@ -676,7 +701,8 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             const concreteSku = this.getConcreteSku(product, abstractSku);
             // A trigger without the abstract product SKU falls back to the SKU it has.
             const itemId = abstractSku || String(product.sku);
-            const itemKey = `${itemId}|${concreteSku}`;
+            const variant = this.getVariant(product.variant);
+            const itemKey = `${itemId}|${concreteSku}|${variant}`;
             const sameItem = itemsByKey.get(itemKey);
 
             if (sameItem) {
@@ -688,9 +714,19 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             const item: GtagItem = { item_id: itemId, item_name: this.getItemName(product, itemId), quantity };
             const price = this.getPrice(product.price);
 
+            if (product.brand) {
+                item.item_brand = String(product.brand);
+            }
+
+            if (variant) {
+                item.item_variant = variant;
+            }
+
             if (concreteSku) {
                 item.concrete_sku = concreteSku;
             }
+
+            this.addCategoryLevels(item, product.categories ?? []);
 
             if (price !== undefined) {
                 item.price = price;
@@ -700,6 +736,20 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         }
 
         return Array.from(itemsByKey.values());
+    }
+
+    // A template may send the variant as one string, e.g. "Red / 64 GB", instead of its values; it is reported as it is.
+    protected getVariant(variant: unknown): string {
+        if (Array.isArray(variant)) {
+            return variant.map(String).join(this.getVariantValueSeparator());
+        }
+
+        return String(variant ?? '');
+    }
+
+    // One level per key of getCategoryLevelKeys(), top level first; see getCategoryLevels().
+    protected addCategoryLevels(item: GtagItem, categories: ProductCategory[]): void {
+        Object.assign(item, getCategoryLevels(categories, this.getCategoryLevelKeys()));
     }
 
     protected getConcreteSku(product: ProductDetails, abstractSku: string): string {
@@ -744,11 +794,16 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
 
     // Storefront emitters send prices in cents; the price-precision attribute holds the parts per currency unit.
     protected getPrice(price: unknown): number | undefined {
-        if (typeof price !== 'number') {
+        const pricePrecision = this.pricePrecision;
+        // Without a usable precision the price cannot be converted; the event is then sent without a price, not broken.
+        const isPriceKnown = typeof price === 'number' && Number.isFinite(price);
+        const isPricePrecisionUsable = Number.isFinite(pricePrecision) && pricePrecision > 0;
+
+        if (!isPriceKnown || !isPricePrecisionUsable) {
             return undefined;
         }
 
-        return Number((price / this.pricePrecision).toFixed(this.priceDecimals));
+        return Number((price / pricePrecision).toFixed(this.priceDecimals));
     }
 
     protected searchEventHandler(data: SearchEventData): void {

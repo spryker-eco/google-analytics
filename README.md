@@ -53,10 +53,16 @@ Every ecommerce event reports a product with the same item data, so GA4 joins th
 |---|---|
 | `item_id` | The abstract product SKU |
 | `item_name` | The abstract product name |
+| `item_variant` | The values of the attributes the variants of the product differ in, e.g. `Red / 64 GB`, where a variant is known |
+| `item_brand`, `item_category` … `item_category5` | The brand and the category path of the product, top level first; a deeper path keeps its top five levels |
 | `concrete_sku` | Custom item parameter: the concrete product SKU, where the event knows the concrete product, e.g. in the cart. A product card and a product detail page without a selected variant of a product with several variants have none. |
-| `price`, `quantity` | The unit price in the currency, e.g. 19.99, and the quantity added or removed |
+| `price`, `quantity` | The unit price in the currency, e.g. 19.99, and the quantity added or removed, in whole pieces: a quantity in a measurement unit, e.g. 1.5 m, is rounded and is at least 1 |
 
-The lines of one action for the same concrete product are sent as one item with their quantities added up. Without a price for every item, e.g. for a guest who may not see prices, the event is sent without `value`.
+A product card on the catalog, search or new products page shows the search result data of the product, which has no product attributes, so its brand and category path are read for all cards of the page at once. A product card built from the product data, e.g. in a CMS widget, a product relation, the wishlist or a shopping list, reports both as well.
+
+A cart line gets its abstract product name and brand when the cart expands its items. A cart converted from a quote request keeps the items stored with the quote request, as a converted cart is locked and not expanded again, so the lines of a quote request saved before this module version report no brand, and the product name in place of the abstract product name.
+
+The lines of one action for the same concrete product and variant are sent as one item with their quantities added up. Without a price for every item, e.g. for a guest who may not see prices, the event is sent without `value`.
 
 ### Report by concrete product
 
