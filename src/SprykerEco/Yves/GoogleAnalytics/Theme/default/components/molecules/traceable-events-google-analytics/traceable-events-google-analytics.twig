@@ -9,10 +9,11 @@
     gtagId: null,
 } %}
 
-{% set shouldRender = data.gtagId is defined %}
+{# Without a Measurement ID nothing is loaded or sent; `is defined` was also true for the empty setting. #}
+{% set shouldRender = data.gtagId is not empty %}
 
-{# Event settings are named `<event>_event_ebabled`, e.g. `search_event_ebabled`. #}
-{% set eventSettingSuffix = '_event_ebabled' %}
+{# Event settings are named `<event>_event_enabled`, e.g. `search_event_enabled`. #}
+{% set eventSettingSuffix = '_event_enabled' %}
 
 {# Maps every event setting to its on/off state by event name, e.g. { search: true }; other settings of the tab never reach the page. #}
 {% set enabledEvents = {} %}
@@ -28,6 +29,9 @@
     {% endif %}
 {% endfor %}
 
+{# The query parameters a project keeps in the page URLs besides the campaign ones, from GoogleAnalyticsConfig; none while GoogleAnalyticsWidget is not registered. #}
+{% set additionalPageUrlQueryParameters = findWidget('GoogleAnalyticsWidget').parameters.additionalPageUrlQueryParameters ?? [] %}
+
 {% define attributes = {
     initial: shouldRender
         ? {
@@ -39,7 +43,14 @@
         : {},
     'traceable-adapter': true,
     'data-gtag-script-src': "https://www.googletagmanager.com/gtag/js?id=#{data.gtagId}",
+    'price-precision': constant('Spryker\\Shared\\Money\\Converter\\IntegerToDecimalConverter::PRICE_PRECISION'),
+    'page-url-query-parameters': additionalPageUrlQueryParameters | json_encode,
 } %}
+
+{#
+    price-precision - storefront prices are integers of this many parts per currency unit, as Money stores them.
+    page-url-query-parameters - JSON list of the query parameters kept in the page URLs besides the campaign ones.
+#}
 
 {% block component %}
     {% if shouldRender %}
