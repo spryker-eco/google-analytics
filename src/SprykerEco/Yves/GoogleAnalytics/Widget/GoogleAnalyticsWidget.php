@@ -20,12 +20,15 @@ class GoogleAnalyticsWidget extends AbstractWidget
 {
     protected const string PARAMETER_ADDITIONAL_PAGE_URL_QUERY_PARAMETERS = 'additionalPageUrlQueryParameters';
 
+    protected const string PARAMETER_PRICE_PRECISION = 'pricePrecision';
+
     public function __construct()
     {
         $this->addParameter(
             static::PARAMETER_ADDITIONAL_PAGE_URL_QUERY_PARAMETERS,
             $this->getConfig()->getAdditionalPageUrlQueryParameters(),
         );
+        $this->addParameter(static::PARAMETER_PRICE_PRECISION, $this->getConfig()->getPricePrecision());
     }
 
     public static function getName(): string
