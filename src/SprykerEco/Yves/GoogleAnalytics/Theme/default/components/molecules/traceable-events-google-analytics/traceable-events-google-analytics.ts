@@ -399,7 +399,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     }
 
     protected cartItemsChangeHandler(data: CartItemsChangeData): void {
-        // The cart tracker sends both arrays; a custom dispatcher may send only one, which must not break the other.
+        // The CartPage cart-items-change component sends both arrays; a custom dispatcher may send only one, which must not break the other.
         const increased = data.eventDetail?.increased ?? [];
         const decreased = data.eventDetail?.decreased ?? [];
 

@@ -9,6 +9,7 @@ declare(strict_types = 1);
 
 namespace SprykerEco\Yves\GoogleAnalytics;
 
+use Spryker\Shared\Money\Converter\IntegerToDecimalConverter;
 use Spryker\Yves\Kernel\AbstractBundleConfig;
 
 class GoogleAnalyticsConfig extends AbstractBundleConfig
@@ -31,5 +32,17 @@ class GoogleAnalyticsConfig extends AbstractBundleConfig
     public function getAdditionalPageUrlQueryParameters(): array
     {
         return static::ADDITIONAL_PAGE_URL_QUERY_PARAMETERS;
+    }
+
+    /**
+     * Specification:
+     * - Returns the parts per currency unit of the integer storefront prices, e.g. 100 for prices in cents, as Money stores them.
+     * - The reported prices and values are the integer prices divided by it.
+     *
+     * @api
+     */
+    public function getPricePrecision(): int
+    {
+        return IntegerToDecimalConverter::PRICE_PRECISION;
     }
 }
