@@ -10,7 +10,36 @@ Provides Google Analytics 4 (GA4) integration for Spryker. Tracks storefront sea
 composer require spryker-eco/google-analytics
 ```
 
-The ecommerce events report a product by its abstract product SKU and name. The storefront reads them from the product storage, so no republishing is needed after the upgrade. Cart lines and order items carry them only when the project registers `ProductCartPlugin` (`spryker/product-cart-connector`) in `CartDependencyProvider::getExpanderPlugins()` and `ProductIdOrderItemExpanderPlugin` (`spryker/sales-product-connector`) in `SalesDependencyProvider::getOrderItemExpanderPlugins()`; without them, those items are reported by their concrete product SKU and without an abstract name.
+### Project wiring
+
+The ecommerce events report a product by its abstract product SKU and name, with its brand, variant and category path. The storefront reads them from the product storage, so no republishing is needed after the upgrade. The project registers the following; a missing line makes nothing fail, the events only lack the fields it provides.
+
+`Pyz\Zed\Cart\CartDependencyProvider`, in both `getExpanderPlugins()` and `getExpanderPluginsForOrderAmendment()`, after `ProductCartPlugin`:
+
+| Plugin | Module | Sets on cart items |
+|---|---|---|
+| `ProductCartPlugin` | `spryker/product-cart-connector` | the abstract product SKU and the concrete attributes the other plugins read |
+| `ProductAbstractNameItemExpanderPlugin` | `spryker/product-cart-connector` | `abstractName` |
+| `ProductBrandItemExpanderPlugin` | `spryker/product-cart-connector` | `brand` |
+| `ProductSelectedVariantAttributesItemExpanderPlugin` | `spryker/product-attribute` | `selectedVariantAttributes` |
+| `CategoryPathItemExpanderPlugin` | `spryker/product-category` | `categoryPath` |
+
+`Pyz\Zed\Sales\SalesDependencyProvider::getOrderItemExpanderPlugins()`, for the order details page and reorder:
+
+| Plugin | Module | Sets on order items |
+|---|---|---|
+| `ProductIdOrderItemExpanderPlugin` | `spryker/sales-product-connector` | the abstract product SKU |
+| `SelectedVariantAttributesOrderItemExpanderPlugin` | `spryker/sales-product-connector` | `selectedVariantAttributes` |
+
+`Pyz\Yves\ShopApplication\ShopApplicationDependencyProvider::getGlobalWidgets()`:
+
+| Widget | Module | Provides |
+|---|---|---|
+| `TraceableEventWidget` | `spryker-shop/traceable-event-widget` | the traceable events |
+| `ProductTrackingDetailsWidget` | `spryker-shop/traceable-event-widget` | the abstract product name, brand, variant and category path of products that lists and the order details page render without them, e.g. search results |
+| `GoogleAnalyticsWidget` | `spryker-eco/google-analytics` | the project's `GoogleAnalyticsConfig`, see [Page URLs](#page-urls) |
+
+`Pyz\Yves\CartPage\CartPageConfig`, for the changes made on the cart page in the cart async mode: `IS_CART_ACTIONS_ASYNC_MODE_ENABLED` and `IS_CART_ITEMS_CHANGE_TRACKING_ENABLED` set to `true`, see [Cart changes and the cart mode](#cart-changes-and-the-cart-mode).
 
 ## Upgrading from 1.4.0
 
