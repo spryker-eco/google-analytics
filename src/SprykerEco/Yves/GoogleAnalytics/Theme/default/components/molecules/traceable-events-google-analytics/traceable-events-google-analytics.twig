@@ -29,6 +29,12 @@
     {% endif %}
 {% endfor %}
 
+{# The query parameters a project keeps in the page URLs besides the campaign ones, from GoogleAnalyticsConfig; none while GoogleAnalyticsWidget is not registered. #}
+{% set additionalPageUrlQueryParameters = findWidget('GoogleAnalyticsWidget').parameters.additionalPageUrlQueryParameters ?? [] %}
+
+{# The price precision from GoogleAnalyticsConfig; while GoogleAnalyticsWidget is not registered, the Money precision it returns by default. #}
+{% set pricePrecision = findWidget('GoogleAnalyticsWidget').parameters.pricePrecision ?? constant('Spryker\\Shared\\Money\\Converter\\IntegerToDecimalConverter::PRICE_PRECISION') %}
+
 {% define attributes = {
     initial: shouldRender
         ? {
@@ -40,13 +46,13 @@
         : {},
     'traceable-adapter': true,
     'data-gtag-script-src': "https://www.googletagmanager.com/gtag/js?id=#{data.gtagId}",
-    'price-precision': constant('Spryker\\Shared\\Money\\Converter\\IntegerToDecimalConverter::PRICE_PRECISION'),
-    'gtag-event-timeout': 2000,
+    'price-precision': pricePrecision,
+    'page-url-query-parameters': additionalPageUrlQueryParameters | json_encode,
 } %}
 
 {#
     price-precision - storefront prices are integers of this many parts per currency unit, as Money stores them.
-    gtag-event-timeout - milliseconds an event may wait for Google Analytics to confirm it, enough for a cold script load; a page about to navigate waits no longer.
+    page-url-query-parameters - JSON list of the query parameters kept in the page URLs besides the campaign ones.
 #}
 
 {% block component %}
