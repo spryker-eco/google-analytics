@@ -1,14 +1,29 @@
-/* eslint-disable max-lines -- an adapter keeps all handlers of its provider as overridable methods, like the Algolia adapter */
+/* eslint-disable max-lines -- the adapter keeps its event handlers and the gtag script state as overridable methods; the items, page data and stored events live in their own modules */
 /* eslint-disable camelcase -- GA4 defines its event and item parameters in snake_case, e.g. item_id, and gtag only accepts these names */
 import {
     BaseTraceableEventAdapter,
     TraceableEventHandlers,
 } from 'TraceableEventWidget/components/molecules/traceable-events-orchestrator/base-traceable-event-adapter';
-import {
-    EventsHandlerData,
-    EventName,
-} from 'TraceableEventWidget/components/molecules/traceable-events-orchestrator/traceable-events-orchestrator';
 import { debug } from 'ShopUi/app/logger';
+import { CATEGORY_LEVEL_KEYS, CategoryLevelKey } from './category-levels';
+import { buildGtagItems, roundQuantitiesToWholePieces, sumItemsValue, VARIANT_VALUE_SEPARATOR } from './gtag-items';
+import {
+    CAMPAIGN_QUERY_PARAMETERS,
+    removePersonalDataFromTitle,
+    removePersonalDataFromUrl,
+} from './page-data-sanitizer';
+import { PendingEventsStorage } from './pending-events-storage';
+import {
+    CartEventData,
+    CartItemsChangeData,
+    EnabledEvents,
+    GtagFunction,
+    GtagItem,
+    InitialData,
+    PendingEvent,
+    ProductDetails,
+    SearchEventData,
+} from './types';
 
 declare global {
     interface SPRYKER_EVENTS {
@@ -25,113 +40,11 @@ declare global {
     }
 }
 
-interface GtagFunction {
-    (command: 'js', date: Date): void;
-    (command: 'config', targetId: string, config?: Record<string, unknown>): void;
-    (command: 'set', params: Record<string, unknown>): void;
-    (command: 'event', eventName: string, params?: Record<string, unknown>): void;
-}
-
-// Event name mapped to its on/off state, e.g. `search` for the `search_event_enabled` Back Office setting.
-type EnabledEvents = Record<string, boolean>;
-
-interface InitialData {
-    appId: string;
-    store: string;
-    locale: string;
-    events: EnabledEvents;
-}
-
-interface SearchEventData extends EventsHandlerData<EventName> {
-    eventDetail: {
-        searchTerm: string;
-        eventCategory: string;
-        eventLabel: string;
-        resultsCount: number;
-        eventName: string;
-    };
-}
-
-// A product as the storefront triggers send it; `price` is in cents, `newQuantity` is set when a cart line quantity changes.
-interface ProductDetails {
-    sku: string;
-    // The SKU of the abstract product, sent as item_id, so every step of the funnel reports a product under the same id.
-    abstractSku?: string;
-    // The SKU of the concrete product, sent by a trigger whose `sku` may stand for something else, e.g. a product card of a product
-    // with several variants, which sends an empty one; without it, `sku` is concrete when it differs from the abstract product SKU.
-    concreteSku?: string;
-    // The product's own name, e.g. of a concrete product "Galaxy Tab A 32 GB", and the name of its abstract product; a variant may have a name of its own.
-    name?: string;
-    abstractName?: string;
-    price?: number;
-    quantity?: number;
-    newQuantity?: number;
-}
-
-interface CartEventData extends EventsHandlerData<EventName> {
-    currency: string;
-    products?: ProductDetails[];
-}
-
-// Cart lines whose quantity the cart confirmed as changed; `quantity` is the changed amount.
-interface CartItemsChangeData extends EventsHandlerData<EventName> {
-    currency: string;
-    eventDetail: {
-        increased: ProductDetails[];
-        decreased: ProductDetails[];
-    };
-}
-
-// A GA4 ecommerce `items[]` entry.
-interface GtagItem {
-    item_id: string;
-    item_name: string;
-    // A custom item parameter: the SKU of the concrete product, where the event knows it, e.g. in the cart; a product list card of a product
-    // with several variants has none. Merchants register it as an item-scoped custom dimension to report by concrete product.
-    concrete_sku?: string;
-    price?: number;
-    quantity: number;
-}
-
 // Used when a project template renders the component without the price-precision attribute: Money stores prices in cents.
 const DEFAULT_PRICE_PRECISION = 100;
 
-// The query parameters Google Analytics reads for campaign attribution. Every other query parameter, and the fragment, is left out of
-// the page URLs sent with every hit, as they may carry personal data, e.g. the token of a password reset link.
-const CAMPAIGN_QUERY_PARAMETERS: ReadonlySet<string> = new Set([
-    'utm_source',
-    'utm_medium',
-    'utm_campaign',
-    'utm_term',
-    'utm_content',
-    'utm_id',
-    'utm_source_platform',
-    'utm_creative_format',
-    'utm_marketing_tactic',
-    'gclid',
-    'gbraid',
-    'wbraid',
-    'dclid',
-    '_gl',
-]);
-// An event raised while the gtag script is loading; `params` are its gtag event parameters, `raisedAt` when it was raised.
-interface PendingEvent {
-    name: string;
-    params: Record<string, unknown>;
-    raisedAt: number;
-}
-
-// The events a page could not send before it was left, kept in the session storage of the tab for the next page.
+// The events a page could not send before it was left are kept under this key, per Measurement ID.
 const STORED_EVENTS_KEY = 'traceable-events-google-analytics:pending-events';
-// A tab whose gtag script never loads passes the events on from page to page; only the newest ones are kept.
-const MAX_STORED_EVENTS = 50;
-// An event the tab could not send for this long is dropped: sent later, it would land in another session and at another time.
-// 30 minutes.
-const MAX_PENDING_EVENT_AGE_MILLISECONDS = 1800000;
-
-// A quote request page has the quote request reference in its path, e.g. /quote-request/details/DE--21-8, and in its title. The
-// reference contains the customer reference, so it is left out of the page URLs and the title, for the agent's pages as well.
-const QUOTE_REQUEST_REFERENCE_PATH_PATTERN = /(\/quote-request\/[\w-]+\/)([^/]+)/;
 
 // The Measurement IDs gtag is configured for on this page: a component mounted again, e.g. by a re-render, does not configure
 // gtag again, which would send a second page_view.
@@ -218,55 +131,20 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         super.disconnectedCallback();
     }
 
-    // Origin and path, and only the campaign query parameters; an empty or invalid URL, e.g. no referrer, stays empty.
+    // Origin and path, and only the query parameters of getPageUrlQueryParameters(); an empty or invalid URL, e.g. no referrer,
+    // stays empty. A project with other personal data in its URLs, e.g. in a path of its own, removes it here.
     protected getUrlWithoutPersonalData(url: string): string {
-        let parsedUrl: URL;
-
-        try {
-            parsedUrl = new URL(url);
-        } catch {
-            return '';
-        }
-
-        const keptQueryParameters = this.getPageUrlQueryParameters();
-        const keptQuery = new URLSearchParams();
-
-        for (const [name, value] of parsedUrl.searchParams) {
-            if (keptQueryParameters.has(name)) {
-                keptQuery.append(name, value);
-            }
-        }
-
-        const query = keptQuery.toString();
-        const path = this.getPathWithoutQuoteRequestReference(parsedUrl.pathname);
-
-        return query ? `${parsedUrl.origin}${path}?${query}` : `${parsedUrl.origin}${path}`;
+        return removePersonalDataFromUrl(url, this.getPageUrlQueryParameters());
     }
 
-    protected getPathWithoutQuoteRequestReference(path: string): string {
-        return path.replace(this.getQuoteRequestReferencePathPattern(), '$1');
-    }
-
-    // The title of a quote request page shows its reference, which the path of the page names.
+    // The title of a quote request page shows its reference; a project with other personal data in its titles removes it here.
     protected getTitleWithoutPersonalData(title: string): string {
-        const quoteRequestReferenceMatch = window.location.pathname.match(this.getQuoteRequestReferencePathPattern());
-
-        if (!quoteRequestReferenceMatch) {
-            return title;
-        }
-
-        const quoteRequestReference = decodeURIComponent(quoteRequestReferenceMatch[2]);
-
-        return title.split(quoteRequestReference).join('').trim();
-    }
-
-    protected getCampaignQueryParameters(): ReadonlySet<string> {
-        return CAMPAIGN_QUERY_PARAMETERS;
+        return removePersonalDataFromTitle(title, window.location.pathname);
     }
 
     // The campaign parameters and the ones the project keeps besides them, see GoogleAnalyticsConfig::getAdditionalPageUrlQueryParameters().
     protected getPageUrlQueryParameters(): ReadonlySet<string> {
-        return new Set([...this.getCampaignQueryParameters(), ...this.additionalPageUrlQueryParameters]);
+        return new Set([...CAMPAIGN_QUERY_PARAMETERS, ...this.additionalPageUrlQueryParameters]);
     }
 
     // A malformed or missing attribute keeps only the campaign parameters, so no other parameter is sent by mistake.
@@ -280,16 +158,14 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         }
     }
 
-    protected getQuoteRequestReferencePathPattern(): RegExp {
-        return QUOTE_REQUEST_REFERENCE_PATH_PATTERN;
+    // A project may join the variant values differently, e.g. with ', '.
+    protected getVariantValueSeparator(): string {
+        return VARIANT_VALUE_SEPARATOR;
     }
 
-    protected getMaxStoredEvents(): number {
-        return MAX_STORED_EVENTS;
-    }
-
-    protected getMaxPendingEventAgeMilliseconds(): number {
-        return MAX_PENDING_EVENT_AGE_MILLISECONDS;
+    // A project may report fewer category levels, e.g. the first three keys.
+    protected getCategoryLevelKeys(): readonly CategoryLevelKey[] {
+        return CATEGORY_LEVEL_KEYS;
     }
 
     // Only the storefront events of the GA4 events switched on in the Back Office are listened to. A quantity change can be
@@ -381,8 +257,8 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         }
 
         // The value is calculated from the exact quantities, e.g. 1.5 m; only the item quantities GA4 receives are whole pieces.
-        const value = this.getItemsValue(items);
-        const eventParams: Record<string, unknown> = { currency, items: this.getItemsInWholePieces(items) };
+        const value = sumItemsValue(items, this.priceDecimals);
+        const eventParams: Record<string, unknown> = { currency, items: roundQuantitiesToWholePieces(items) };
 
         // Without a price for every item (e.g. a guest who may not see prices) the value is left out, the event is still sent.
         if (value !== undefined) {
@@ -539,196 +415,34 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             params: { ...pageParams, ...params },
             raisedAt,
         }));
-        // Added to what is stored already, e.g. by the same page when it was hidden before.
-        const storedEvents = [...this.readStoredEvents(), ...pageEvents].slice(-this.getMaxStoredEvents());
 
         // Taken off the page, so a page restored from the back-forward cache does not send them as well as the next page.
         this.pendingEvents = [];
-
-        try {
-            window.sessionStorage.setItem(this.storedEventsKey, JSON.stringify(storedEvents));
-        } catch (error) {
-            // Storage that is switched off or full loses the events, as the navigation would; tracking never breaks the page.
-            debug(
-                `${this.name}: ${storedEvents.length} pending events are lost, the session storage refused them: ${error}`,
-            );
-        }
+        this.createPendingEventsStorage().add(pageEvents);
     }
 
     // Taken off the storage before they are sent, so every page sends them once at most.
-    // Runs on every page load and tab focus; with nothing stored, the usual case, it only reads the storage once.
     protected sendStoredEvents(): void {
-        const storedEventsJson = this.readStoredEventsJson();
-
-        if (storedEventsJson === null) {
-            return;
-        }
-
-        const storedEvents = this.parseStoredEvents(storedEventsJson);
-
-        try {
-            window.sessionStorage.removeItem(this.storedEventsKey);
-        } catch {
-            // Storage that is switched off has nothing stored; readStoredEventsJson() already reported it.
-        }
-
-        const oldestRaisedAt = Date.now() - this.getMaxPendingEventAgeMilliseconds();
-        const currentEvents = storedEvents.filter((storedEvent) => storedEvent.raisedAt >= oldestRaisedAt);
-
-        if (currentEvents.length < storedEvents.length) {
-            debug(
-                `${this.name}: ${storedEvents.length - currentEvents.length} stored events are older than the maximum age and dropped`,
-            );
-        }
-
-        for (const storedEvent of currentEvents) {
+        for (const storedEvent of this.createPendingEventsStorage().take()) {
             this.queueEvent(storedEvent);
         }
     }
 
-    protected readStoredEvents(): PendingEvent[] {
-        const storedEventsJson = this.readStoredEventsJson();
-
-        return storedEventsJson === null ? [] : this.parseStoredEvents(storedEventsJson);
-    }
-
-    // Null when nothing is stored, or when the storage is switched off.
-    protected readStoredEventsJson(): string | null {
-        try {
-            return window.sessionStorage.getItem(this.storedEventsKey);
-        } catch (error) {
-            debug(`${this.name}: the stored events cannot be read: ${error}`);
-
-            return null;
-        }
-    }
-
-    protected parseStoredEvents(storedEventsJson: string): PendingEvent[] {
-        let storedEvents: unknown;
-
-        try {
-            storedEvents = JSON.parse(storedEventsJson);
-        } catch (error) {
-            // A value that is not JSON has no events to send; sendStoredEvents() removes it.
-            debug(`${this.name}: the stored events cannot be read: ${error}`);
-
-            return [];
-        }
-
-        if (!Array.isArray(storedEvents)) {
-            return [];
-        }
-
-        return storedEvents.filter((storedEvent: unknown): storedEvent is PendingEvent =>
-            this.isPendingEvent(storedEvent),
+    // Per Measurement ID, as another store of the same domain may report to another property.
+    protected createPendingEventsStorage(): PendingEventsStorage {
+        return new PendingEventsStorage(`${STORED_EVENTS_KEY}:${this.appId}`, (message: string) =>
+            debug(`${this.name}: ${message}`),
         );
     }
 
-    protected isPendingEvent(value: unknown): value is PendingEvent {
-        const pendingEvent = value as PendingEvent;
-
-        return (
-            typeof pendingEvent?.name === 'string' &&
-            typeof pendingEvent.params === 'object' &&
-            pendingEvent.params !== null &&
-            typeof pendingEvent.raisedAt === 'number'
-        );
-    }
-
-    // One entry per product and concrete product: lines of the same one are added up, so an item is never sent twice.
+    // One entry per product, concrete product and variant: lines of the same one are added up, so an item is never sent twice.
     protected getItems(products: ProductDetails[]): GtagItem[] {
-        const itemsByKey = new Map<string, GtagItem>();
-
-        for (const product of products) {
-            if (!product?.sku) {
-                continue;
-            }
-
-            const quantity = Number(product.quantity ?? 1);
-            // False for a zero, negative or non-numeric quantity.
-            const isQuantityPositive = quantity > 0;
-
-            if (!isQuantityPositive) {
-                continue;
-            }
-
-            const abstractSku = String(product.abstractSku || '');
-            const concreteSku = this.getConcreteSku(product, abstractSku);
-            // A trigger without the abstract product SKU falls back to the SKU it has.
-            const itemId = abstractSku || String(product.sku);
-            const itemKey = `${itemId}|${concreteSku}`;
-            const sameItem = itemsByKey.get(itemKey);
-
-            if (sameItem) {
-                sameItem.quantity += quantity;
-
-                continue;
-            }
-
-            const item: GtagItem = { item_id: itemId, item_name: this.getItemName(product, itemId), quantity };
-            const price = this.getPrice(product.price);
-
-            if (concreteSku) {
-                item.concrete_sku = concreteSku;
-            }
-
-            if (price !== undefined) {
-                item.price = price;
-            }
-
-            itemsByKey.set(itemKey, item);
-        }
-
-        return Array.from(itemsByKey.values());
-    }
-
-    protected getConcreteSku(product: ProductDetails, abstractSku: string): string {
-        if (product.concreteSku !== undefined) {
-            return String(product.concreteSku ?? '');
-        }
-
-        const sku = String(product.sku);
-
-        // Without the abstract product SKU, e.g. from a custom trigger, it is unknown which kind the SKU is.
-        if (!abstractSku) {
-            return '';
-        }
-
-        return sku === abstractSku ? '' : sku;
-    }
-
-    // The abstract product name, like the item ID, so a product keeps one name across the funnel whichever variant is shown.
-    // item_name is never empty: a trigger without a name sends the ID instead.
-    protected getItemName(product: ProductDetails, itemId: string): string {
-        return String(product.abstractName || product.name || itemId);
-    }
-
-    // GA4 counts whole pieces; a quantity in a measurement unit, e.g. 1.5 m, is rounded and stays at least 1.
-    protected getItemsInWholePieces(items: GtagItem[]): GtagItem[] {
-        return items.map((item) => ({ ...item, quantity: Math.max(1, Math.round(item.quantity)) }));
-    }
-
-    protected getItemsValue(items: GtagItem[]): number | undefined {
-        let value = 0;
-
-        for (const item of items) {
-            if (item.price === undefined) {
-                return undefined;
-            }
-
-            value += item.price * item.quantity;
-        }
-
-        return Number(value.toFixed(this.priceDecimals));
-    }
-
-    // Storefront emitters send prices in cents; the price-precision attribute holds the parts per currency unit.
-    protected getPrice(price: unknown): number | undefined {
-        if (typeof price !== 'number') {
-            return undefined;
-        }
-
-        return Number((price / this.pricePrecision).toFixed(this.priceDecimals));
+        return buildGtagItems(products, {
+            pricePrecision: this.pricePrecision,
+            priceDecimals: this.priceDecimals,
+            variantValueSeparator: this.getVariantValueSeparator(),
+            categoryLevelKeys: this.getCategoryLevelKeys(),
+        });
     }
 
     protected searchEventHandler(data: SearchEventData): void {
@@ -754,11 +468,6 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     // An event missing from the map, e.g. before `configuration:sync` adds its setting, is off, like the setting's Back Office default.
     protected isEventEnabled(eventName: string): boolean {
         return this.enabledEvents[eventName] === true;
-    }
-
-    // Per measurement ID, as another store of the same domain may report to another property.
-    protected get storedEventsKey(): string {
-        return `${STORED_EVENTS_KEY}:${this.appId}`;
     }
 
     protected get gtagScriptSrc(): string {

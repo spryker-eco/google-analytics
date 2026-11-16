@@ -10,7 +10,33 @@ Provides Google Analytics 4 (GA4) integration for Spryker. Tracks storefront sea
 composer require spryker-eco/google-analytics
 ```
 
-The ecommerce events report a product by its abstract product SKU and name. The storefront reads them from the product storage, so no republishing is needed after the upgrade. Cart lines and order items carry them only when the project registers `ProductCartPlugin` (`spryker/product-cart-connector`) in `CartDependencyProvider::getExpanderPlugins()` and `ProductIdOrderItemExpanderPlugin` (`spryker/sales-product-connector`) in `SalesDependencyProvider::getOrderItemExpanderPlugins()`; without them, those items are reported by their concrete product SKU and without an abstract name.
+### Project wiring
+
+The ecommerce events report a product by its abstract product SKU and name, with its brand, variant and category path. The storefront reads them from the product storage, so no republishing is needed after the upgrade. The project registers the following; a missing line makes nothing fail, the events only lack the fields it provides.
+
+`Pyz\Zed\Cart\CartDependencyProvider`, in both `getExpanderPlugins()` and `getExpanderPluginsForOrderAmendment()`, `CategoryPathItemExpanderPlugin` after `ProductCartPlugin`:
+
+| Plugin | Module | Sets on cart items |
+|---|---|---|
+| `ProductCartPlugin` | `spryker/product-cart-connector` | the abstract product SKU, `abstractName`, `brand` and `selectedVariantAttributes` |
+| `CategoryPathItemExpanderPlugin` | `spryker/product-category` | `categoryPath` |
+
+`Pyz\Zed\Sales\SalesDependencyProvider::getOrderItemExpanderPlugins()`, for the order details page and reorder:
+
+| Plugin | Module | Sets on order items |
+|---|---|---|
+| `ProductIdOrderItemExpanderPlugin` | `spryker/sales-product-connector` | the abstract product SKU |
+| `SelectedVariantAttributesOrderItemExpanderPlugin` | `spryker/sales-product-connector` | `selectedVariantAttributes` |
+
+`Pyz\Yves\ShopApplication\ShopApplicationDependencyProvider::getGlobalWidgets()`:
+
+| Widget | Module | Provides |
+|---|---|---|
+| `TraceableEventWidget` | `spryker-shop/traceable-event-widget` | the traceable events |
+| `ProductTrackingDetailsWidget` | `spryker-shop/traceable-event-widget` | the abstract product name, brand, variant and category path of products that lists and the order details page render without them, e.g. search results |
+| `GoogleAnalyticsWidget` | `spryker-eco/google-analytics` | the project's `GoogleAnalyticsConfig`, see [Page URLs](#page-urls) |
+
+`Pyz\Yves\CartPage\CartPageConfig`, for the changes made on the cart page in the cart async mode: `IS_CART_ACTIONS_ASYNC_MODE_ENABLED` set to `true`, see [Cart changes and the cart mode](#cart-changes-and-the-cart-mode).
 
 ## Upgrading from 1.4.0
 
@@ -53,10 +79,16 @@ Every ecommerce event reports a product with the same item data, so GA4 joins th
 |---|---|
 | `item_id` | The abstract product SKU |
 | `item_name` | The abstract product name |
+| `item_variant` | The values of the attributes the variants of the product differ in, e.g. `Red / 64 GB`, where a variant is known |
+| `item_brand`, `item_category` … `item_category5` | The brand and the category path of the product, top level first; a deeper path keeps its top five levels |
 | `concrete_sku` | Custom item parameter: the concrete product SKU, where the event knows the concrete product, e.g. in the cart. A product card and a product detail page without a selected variant of a product with several variants have none. |
-| `price`, `quantity` | The unit price in the currency, e.g. 19.99, and the quantity added or removed |
+| `price`, `quantity` | The unit price in the currency, e.g. 19.99, and the quantity added or removed, in whole pieces: a quantity in a measurement unit, e.g. 1.5 m, is rounded and is at least 1 |
 
-The lines of one action for the same concrete product are sent as one item with their quantities added up. Without a price for every item, e.g. for a guest who may not see prices, the event is sent without `value`.
+A product card on the catalog, search or new products page shows the search result data of the product, which has no product attributes, so its brand and category path are read for all cards of the page at once. A product card built from the product data, e.g. in a CMS widget, a product relation, the wishlist or a shopping list, reports both as well.
+
+A cart line gets its abstract product name and brand when the cart expands its items. A cart converted from a quote request keeps the items stored with the quote request, as a converted cart is locked and not expanded again, so the lines of a quote request saved before this module version report no brand, and the product name in place of the abstract product name.
+
+The lines of one action for the same concrete product and variant are sent as one item with their quantities added up. Without a price for every item, e.g. for a guest who may not see prices, the event is sent without `value`.
 
 ### Report by concrete product
 
