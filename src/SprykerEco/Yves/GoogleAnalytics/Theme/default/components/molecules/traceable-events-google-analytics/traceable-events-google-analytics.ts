@@ -27,6 +27,8 @@ declare global {
     interface Window {
         dataLayer: unknown[];
         gtag: GtagFunction;
+        // Google Analytics' opt-out flag, `ga-disable-<Measurement ID>`: while true, gtag sends nothing for that Measurement ID.
+        [gaDisableFlag: `ga-disable-${string}`]: boolean | undefined;
     }
 }
 
@@ -173,6 +175,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     protected listenersController = new AbortController();
     // Stops the load and error listeners once the gtag script has settled, so the page's other resources do not go through them.
     protected gtagScriptListenersController = new AbortController();
+    protected isGtagSetUp = false;
 
     override init(): void {
         const { appId, store, locale, events } = this.initialData;
@@ -208,6 +211,14 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     // Started once the orchestrator allows the adapter, e.g. after the shopper's consent: before, gtag.js is not requested, no Google
     // Analytics cookie is written, no page view is sent and the events a previous page stored stay stored.
     override activate(): void {
+        window[`ga-disable-${this.appId}`] = false;
+
+        // Consent given again after a withdrawal on the same page: gtag is set up and its script loaded already.
+        if (this.isGtagSetUp) {
+            return;
+        }
+
+        this.isGtagSetUp = true;
         this.configureGtag();
 
         // A gtag script already in the DOM, e.g. added by another component, is not added again; its state decides.
@@ -247,6 +258,12 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             page_title: this.getTitleWithoutPersonalData(document.title),
         });
         window.gtag('config', this.appId);
+    }
+
+    // Consent withdrawn on the page: gtag sends nothing more, its automatic events included, e.g. a page_view on a history change.
+    // The cookies it already wrote are left to the consent management platform, which removes them on withdrawal.
+    override deactivate(): void {
+        window[`ga-disable-${this.appId}`] = true;
     }
 
     // Its load or error event settles the events raised while it loads, see watchGtagScript().
