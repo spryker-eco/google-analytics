@@ -93,7 +93,7 @@ features:
                       - global
                       - store
                   settings:
-                      - key: search_event_ebabled
+                      - key: search_event_enabled
                         name: Search
                         description: 'Storefront search is performed. GA4 events: search_results, zero_search_results.'
                         type: boolean
@@ -102,6 +102,42 @@ features:
                         secret: false
                         storefront: true
                         order: 3
+                        scopes:
+                            - global
+                            - store
+                - key: cart_events
+                  name: Cart Events
+                  description: Cart interaction events.
+                  section: event_tracking
+                  toggle_all: true
+                  layout: compact
+                  enabled: true
+                  order: 3
+                  scopes:
+                      - global
+                      - store
+                  settings:
+                      - key: add_to_cart_event_enabled
+                        name: Add to Cart
+                        description: 'A product is added to the cart, or a cart item quantity is raised. GA4 event: add_to_cart.'
+                        type: boolean
+                        default_value: false
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 0
+                        scopes:
+                            - global
+                            - store
+                      - key: remove_from_cart_event_enabled
+                        name: Remove from Cart
+                        description: 'A product is removed from the cart, or a cart item quantity is lowered. GA4 event: remove_from_cart.'
+                        type: boolean
+                        default_value: false
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 1
                         scopes:
                             - global
                             - store
