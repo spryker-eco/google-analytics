@@ -4,6 +4,7 @@ import {
     BaseTraceableEventAdapter,
     TraceableEventHandlers,
 } from 'TraceableEventWidget/components/molecules/traceable-events-orchestrator/base-traceable-event-adapter';
+import { TraceableEventHandler } from 'TraceableEventWidget/components/molecules/traceable-events-orchestrator/traceable-events-orchestrator';
 import { debug } from 'ShopUi/app/logger';
 import { CATEGORY_LEVEL_KEYS, CategoryLevelKey } from './category-levels';
 import { buildGtagItems, roundQuantitiesToWholePieces, sumItemsValue, VARIANT_VALUE_SEPARATOR } from './gtag-items';
@@ -13,6 +14,8 @@ import {
     removePersonalDataFromUrl,
 } from './page-data-sanitizer';
 import { PendingEventsStorage } from './pending-events-storage';
+import { ReportedIdsStorage } from './reported-ids-storage';
+import { TabStorage } from './tab-storage';
 import {
     CartEventData,
     CartItemsChangeData,
@@ -20,6 +23,9 @@ import {
     GtagFunction,
     GtagItem,
     InitialData,
+    ItemList,
+    ItemListViewData,
+    PageLoadData,
     PendingEvent,
     ProductDetails,
     SearchEventData,
@@ -32,6 +38,12 @@ declare global {
         REMOVE_FROM_CART: undefined;
         CHANGE_CART_QUANTITY: undefined;
         CART_ITEMS_CHANGE: undefined;
+        ITEM_LIST_VIEW: undefined;
+        PRODUCT_CLICK: undefined;
+        ADD_TO_WISHLIST: undefined;
+        CHECKOUT_START: undefined;
+        SHIPMENT_SUBMIT: undefined;
+        PAYMENT_SUBMIT: undefined;
     }
 
     interface Window {
@@ -45,6 +57,31 @@ const DEFAULT_PRICE_PRECISION = 100;
 
 // The events a page could not send before it was left are kept under this key, per Measurement ID.
 const STORED_EVENTS_KEY = 'traceable-events-google-analytics:pending-events';
+
+const PAGE_PRODUCT_DETAIL = 'PDP';
+const PAGE_CART = 'CART';
+const PAGE_CHECKOUT = 'CHECKOUT';
+const PAGE_CHECKOUT_SUCCESS = 'CHECKOUT_SUCCESS';
+const CHECKOUT_STEP_SHIPMENT = 'SHIPMENT';
+const CHECKOUT_STEP_PAYMENT = 'PAYMENT';
+
+// Set in the tab when the shopper clicks to start the checkout, taken by the next page load: a checkout step reports begin_checkout,
+// any other page, e.g. the cart a blocked checkout returns to, only discards it. Reloads and moves between steps find none.
+const CHECKOUT_START_REQUEST_STORAGE_KEY = 'traceable-events-google-analytics:checkout-start-requested';
+// Set in the tab when the shopper submits the shipment or payment step, taken by the next page load: the step after it reports
+// add_shipping_info or add_payment_info, the same step shown again, e.g. with errors, only discards it.
+const SHIPMENT_SUBMIT_STORAGE_KEY = 'traceable-events-google-analytics:shipment-submitted';
+const PAYMENT_SUBMIT_STORAGE_KEY = 'traceable-events-google-analytics:payment-submitted';
+// The shipping tier and payment type last reported in this checkout: continuing with the same methods is no new choice.
+// A new checkout start forgets them.
+const REPORTED_SHIPPING_TIER_STORAGE_KEY = 'traceable-events-google-analytics:reported-shipping-tier';
+const REPORTED_PAYMENT_TYPE_STORAGE_KEY = 'traceable-events-google-analytics:reported-payment-type';
+// The order references already reported, per Measurement ID, so reloading or returning to the confirmation page does not report an order again.
+const REPORTED_TRANSACTIONS_STORAGE_KEY = 'traceable-events-google-analytics:reported-transactions';
+const MAX_REPORTED_TRANSACTIONS = 20;
+
+// The list events tell what was shown, not what the shopper wants to buy, so a value summed from their products would mislead reports.
+const EVENTS_WITHOUT_VALUE: ReadonlySet<string> = new Set(['view_item_list', 'select_item']);
 
 // The Measurement IDs gtag is configured for on this page: a component mounted again, e.g. by a re-render, does not configure
 // gtag again, which would send a second page_view.
@@ -192,7 +229,348 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             handlers.CART_ITEMS_CHANGE = [this.cartItemsChangeHandler];
         }
 
+        if (this.isEventEnabled('view_item_list')) {
+            handlers.ITEM_LIST_VIEW = [this.viewItemListHandler];
+        }
+
+        if (this.isEventEnabled('select_item')) {
+            handlers.PRODUCT_CLICK = [this.selectItemHandler];
+        }
+
+        if (this.isEventEnabled('add_to_wishlist')) {
+            handlers.ADD_TO_WISHLIST = [this.addToWishlistHandler];
+        }
+
+        Object.assign(handlers, this.getCheckoutHandlers());
+
+        const pageLoadHandlers = this.getPageLoadHandlers();
+
+        if (pageLoadHandlers.length) {
+            handlers.PAGE_LOAD = pageLoadHandlers;
+        }
+
         return handlers;
+    }
+
+    // A checkout start opens a new checkout, in which the shipment and payment choices are reported anew, so it is listened to
+    // for any of the checkout events.
+    protected getCheckoutHandlers(): Partial<TraceableEventHandlers> {
+        const handlers: Partial<TraceableEventHandlers> = {};
+        const isBeginCheckoutEnabled = this.isEventEnabled('begin_checkout');
+        const isAddShippingInfoEnabled = this.isEventEnabled('add_shipping_info');
+        const isAddPaymentInfoEnabled = this.isEventEnabled('add_payment_info');
+
+        if (isBeginCheckoutEnabled || isAddShippingInfoEnabled || isAddPaymentInfoEnabled) {
+            handlers.CHECKOUT_START = [this.checkoutStartHandler];
+        }
+
+        if (isAddShippingInfoEnabled) {
+            handlers.SHIPMENT_SUBMIT = [this.shipmentSubmitHandler];
+        }
+
+        if (isAddPaymentInfoEnabled) {
+            handlers.PAYMENT_SUBMIT = [this.paymentSubmitHandler];
+        }
+
+        return handlers;
+    }
+
+    // The events a page load reports, in this order: the checkout start goes first, as it forgets the choices reported in an
+    // earlier checkout.
+    protected getPageLoadHandlers(): TraceableEventHandler[] {
+        const pageLoadHandlers: TraceableEventHandler[] = [];
+        const isBeginCheckoutEnabled = this.isEventEnabled('begin_checkout');
+        const isAddShippingInfoEnabled = this.isEventEnabled('add_shipping_info');
+        const isAddPaymentInfoEnabled = this.isEventEnabled('add_payment_info');
+
+        if (this.isEventEnabled('view_item')) {
+            pageLoadHandlers.push(this.viewItemHandler);
+        }
+
+        if (this.isEventEnabled('view_cart')) {
+            pageLoadHandlers.push(this.viewCartHandler);
+        }
+
+        if (isBeginCheckoutEnabled || isAddShippingInfoEnabled || isAddPaymentInfoEnabled) {
+            pageLoadHandlers.push(this.checkoutStartPageLoadHandler);
+        }
+
+        if (isAddShippingInfoEnabled) {
+            pageLoadHandlers.push(this.addShippingInfoHandler);
+        }
+
+        if (isAddPaymentInfoEnabled) {
+            pageLoadHandlers.push(this.addPaymentInfoHandler);
+        }
+
+        if (this.isEventEnabled('purchase')) {
+            pageLoadHandlers.push(this.purchaseHandler);
+        }
+
+        return pageLoadHandlers;
+    }
+
+    protected viewItemHandler(data: PageLoadData): void {
+        const viewedProduct = data.products?.[0];
+
+        if (data.page !== PAGE_PRODUCT_DETAIL || !viewedProduct) {
+            return;
+        }
+
+        this.sendItemsEvent('view_item', data.currency, [{ ...viewedProduct, quantity: 1 }]);
+    }
+
+    // Only the cards the shopper saw: the tracker reports each product once per list and page.
+    protected viewItemListHandler(data: ItemListViewData): void {
+        for (const itemList of data.eventDetail?.itemLists ?? []) {
+            this.sendItemListEvent('view_item_list', data.currency, itemList, itemList.products ?? []);
+        }
+    }
+
+    // Only a click in a tracked list is reported, so its list and position match view_item_list; other product cards are no list.
+    protected selectItemHandler(data: CartEventData): void {
+        const clickedProduct = data.products?.[0];
+
+        if (!clickedProduct?.sku || !clickedProduct.itemListId) {
+            return;
+        }
+
+        const itemList = {
+            id: clickedProduct.itemListId,
+            name: clickedProduct.itemListName || clickedProduct.itemListId,
+        };
+
+        this.sendItemListEvent('select_item', data.currency, itemList, [{ ...clickedProduct, quantity: 1 }]);
+    }
+
+    protected sendItemListEvent(
+        eventName: string,
+        currency: string,
+        itemList: Pick<ItemList, 'id' | 'name'>,
+        products: ProductDetails[],
+    ): void {
+        this.sendItemsEvent(eventName, currency, products, {
+            item_list_id: itemList.id,
+            item_list_name: itemList.name,
+        });
+    }
+
+    // One piece of the product: on the product detail page the product shown, from the page data; on the wishlist page the
+    // alternative whose button was clicked.
+    protected addToWishlistHandler(data: CartEventData): void {
+        const wishedProduct = data.products?.[0];
+
+        if (!wishedProduct?.sku) {
+            return;
+        }
+
+        this.sendItemsEvent('add_to_wishlist', data.currency, [{ ...wishedProduct, quantity: 1 }]);
+    }
+
+    // A cart the shopper chose to look at: the cart page opened from a link or the address bar, with at least one product.
+    protected viewCartHandler(data: PageLoadData): void {
+        const cartProducts = data.cartProducts ?? [];
+
+        if (data.page !== PAGE_CART || !cartProducts.length || !this.isPageOpenedByNavigation()) {
+            return;
+        }
+
+        this.sendItemsEvent('view_cart', data.currency, cartProducts);
+    }
+
+    // A reload, the Back or Forward button, or the end of a redirect, e.g. after a form that changed the cart, is no new visit of the page.
+    protected isPageOpenedByNavigation(): boolean {
+        const navigationTiming = performance.getEntriesByType('navigation')[0] as
+            PerformanceNavigationTiming | undefined;
+
+        if (!navigationTiming) {
+            return false;
+        }
+
+        return navigationTiming.type === 'navigate' && navigationTiming.redirectCount === 0;
+    }
+
+    // The checkout button only requests the checkout: the shop may still send the shopper back to the cart, e.g. for an unavailable product.
+    protected checkoutStartHandler(): void {
+        this.createTabStorage().set(CHECKOUT_START_REQUEST_STORAGE_KEY, '1');
+    }
+
+    // Taken on every page load, so only the page the checkout button opened starts a checkout.
+    protected checkoutStartPageLoadHandler(data: PageLoadData): void {
+        const tabStorage = this.createTabStorage();
+        const isCheckoutStartRequested = tabStorage.take(CHECKOUT_START_REQUEST_STORAGE_KEY) !== null;
+        const isCheckoutStarted = isCheckoutStartRequested && data.page === PAGE_CHECKOUT;
+
+        if (!isCheckoutStarted) {
+            return;
+        }
+
+        tabStorage.remove(REPORTED_SHIPPING_TIER_STORAGE_KEY);
+        tabStorage.remove(REPORTED_PAYMENT_TYPE_STORAGE_KEY);
+
+        const checkoutProducts = data.checkoutProducts ?? [];
+
+        if (!this.isEventEnabled('begin_checkout') || !checkoutProducts.length) {
+            return;
+        }
+
+        this.sendItemsEvent('begin_checkout', data.currency, checkoutProducts, this.getCheckoutParams(data));
+    }
+
+    // The submit only requests the shipment methods: the shop may still show the step again, e.g. when a method is no longer available.
+    protected shipmentSubmitHandler(): void {
+        this.createTabStorage().set(SHIPMENT_SUBMIT_STORAGE_KEY, '1');
+    }
+
+    // Reported on the page the accepted shipment step leads to, once per chosen set of shipment methods in a checkout.
+    protected addShippingInfoHandler(data: PageLoadData): void {
+        const shippingTier = data.checkoutShippingTier ?? '';
+        const isNewShippingTier = this.takeNewCheckoutStepChoice(
+            data,
+            CHECKOUT_STEP_SHIPMENT,
+            SHIPMENT_SUBMIT_STORAGE_KEY,
+            REPORTED_SHIPPING_TIER_STORAGE_KEY,
+            shippingTier,
+        );
+
+        if (!isNewShippingTier) {
+            return;
+        }
+
+        this.sendItemsEvent('add_shipping_info', data.currency, data.checkoutProducts ?? [], {
+            ...this.getCheckoutParams(data),
+            shipping_tier: shippingTier,
+        });
+    }
+
+    // The submit only requests the payment method: the shop may still show the step again, e.g. when required details are missing.
+    protected paymentSubmitHandler(): void {
+        this.createTabStorage().set(PAYMENT_SUBMIT_STORAGE_KEY, '1');
+    }
+
+    // Reported on the page the accepted payment step leads to, once per chosen payment method in a checkout.
+    // Only the method name is sent, never the payment details the step asks for.
+    protected addPaymentInfoHandler(data: PageLoadData): void {
+        const paymentType = data.checkoutPaymentType ?? '';
+        const isNewPaymentType = this.takeNewCheckoutStepChoice(
+            data,
+            CHECKOUT_STEP_PAYMENT,
+            PAYMENT_SUBMIT_STORAGE_KEY,
+            REPORTED_PAYMENT_TYPE_STORAGE_KEY,
+            paymentType,
+        );
+
+        if (!isNewPaymentType) {
+            return;
+        }
+
+        this.sendItemsEvent('add_payment_info', data.currency, data.checkoutProducts ?? [], {
+            ...this.getCheckoutParams(data),
+            payment_type: paymentType,
+        });
+    }
+
+    // Takes the step's submit request. True when the shop accepted the step, i.e. another checkout page is shown, and the choice
+    // differs from the one last reported in this checkout, which it then keeps.
+    protected takeNewCheckoutStepChoice(
+        data: PageLoadData,
+        step: string,
+        submitStorageKey: string,
+        reportedChoiceStorageKey: string,
+        choice: string,
+    ): boolean {
+        const tabStorage = this.createTabStorage();
+        const isStepSubmitted = tabStorage.take(submitStorageKey) !== null;
+        const isStepAccepted = isStepSubmitted && data.page === PAGE_CHECKOUT && data.checkoutStep !== step;
+        const hasCheckoutProducts = Boolean(data.checkoutProducts?.length);
+
+        if (!isStepAccepted || !choice || !hasCheckoutProducts) {
+            return false;
+        }
+
+        const isChoiceChanged = choice !== tabStorage.get(reportedChoiceStorageKey);
+
+        if (!isChoiceChanged) {
+            return false;
+        }
+
+        tabStorage.set(reportedChoiceStorageKey, choice);
+
+        return true;
+    }
+
+    protected getCheckoutParams(data: PageLoadData): Record<string, unknown> {
+        const checkoutParams: Record<string, unknown> = {};
+
+        if (data.checkoutCoupon) {
+            checkoutParams.coupon = data.checkoutCoupon;
+        }
+
+        return checkoutParams;
+    }
+
+    // Reported once per order: the order reference is kept, so a reload of the confirmation page or the Back button does not report it again.
+    protected purchaseHandler(data: PageLoadData): void {
+        const purchase = data.purchase;
+        const purchaseProducts = data.purchaseProducts ?? [];
+
+        if (data.page !== PAGE_CHECKOUT_SUCCESS || !purchase?.transactionId || !purchaseProducts.length) {
+            return;
+        }
+
+        const reportedTransactions = this.createReportedTransactionsStorage();
+
+        if (reportedTransactions.has(purchase.transactionId)) {
+            return;
+        }
+
+        const purchaseParams: Record<string, unknown> = { transaction_id: purchase.transactionId };
+        const shipping = this.convertAmount(purchase.shipping);
+        const tax = this.convertAmount(purchase.tax);
+
+        if (shipping !== undefined) {
+            purchaseParams.shipping = shipping;
+        }
+
+        if (tax !== undefined) {
+            purchaseParams.tax = tax;
+        }
+
+        if (purchase.coupon) {
+            purchaseParams.coupon = purchase.coupon;
+        }
+
+        this.sendItemsEvent('purchase', data.currency, purchaseProducts, purchaseParams);
+        reportedTransactions.add(purchase.transactionId);
+    }
+
+    // An amount in cents in currency units; an amount the visitor may not see arrives as null and is left out.
+    protected convertAmount(amount: unknown): number | undefined {
+        const isAmountKnown = typeof amount === 'number' && Number.isFinite(amount);
+
+        if (!isAmountKnown) {
+            return undefined;
+        }
+
+        return Number((amount / this.pricePrecision).toFixed(this.priceDecimals));
+    }
+
+    protected createTabStorage(): TabStorage {
+        return new TabStorage((message: string) => debug(`${this.name}: ${message}`));
+    }
+
+    // Per Measurement ID, as another store of the same domain may report to another property.
+    protected createReportedTransactionsStorage(): ReportedIdsStorage {
+        return new ReportedIdsStorage(
+            `${REPORTED_TRANSACTIONS_STORAGE_KEY}:${this.appId}`,
+            this.getMaxReportedTransactions(),
+            (message: string) => debug(`${this.name}: ${message}`),
+        );
+    }
+
+    // A project with many orders per visitor and device may keep more.
+    protected getMaxReportedTransactions(): number {
+        return MAX_REPORTED_TRANSACTIONS;
     }
 
     protected addToCartHandler(data: CartEventData): void {
@@ -248,8 +626,13 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         }
     }
 
-    // Builds the items, value and currency of a GA4 ecommerce event.
-    protected sendItemsEvent(eventName: string, currency: string, products: ProductDetails[]): void {
+    // Builds the items, value and currency of a GA4 ecommerce event; `params` are the event's own parameters, e.g. transaction_id.
+    protected sendItemsEvent(
+        eventName: string,
+        currency: string,
+        products: ProductDetails[],
+        params: Record<string, unknown> = {},
+    ): void {
         const items = this.getItems(products);
 
         if (!items.length) {
@@ -258,10 +641,15 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
 
         // The value is calculated from the exact quantities, e.g. 1.5 m; only the item quantities GA4 receives are whole pieces.
         const value = sumItemsValue(items, this.priceDecimals);
-        const eventParams: Record<string, unknown> = { currency, items: roundQuantitiesToWholePieces(items) };
+        const eventParams: Record<string, unknown> = {
+            ...params,
+            currency,
+            items: roundQuantitiesToWholePieces(items),
+        };
+        const hasEventValue = !EVENTS_WITHOUT_VALUE.has(eventName);
 
         // Without a price for every item (e.g. a guest who may not see prices) the value is left out, the event is still sent.
-        if (value !== undefined) {
+        if (hasEventValue && value !== undefined) {
             eventParams.value = value;
         }
 
