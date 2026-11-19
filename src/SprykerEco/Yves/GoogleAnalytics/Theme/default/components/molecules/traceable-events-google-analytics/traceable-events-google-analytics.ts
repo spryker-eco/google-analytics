@@ -91,13 +91,18 @@ const EVENTS_RAISED_BY_NAVIGATION: ReadonlySet<string> = new Set(['select_item']
 // How long such an event waits for the page to be left; a click that keeps the page, e.g. Cmd+click to a new tab, then sends it here.
 const NAVIGATION_WAIT_MILLISECONDS = 2000;
 
-// Events raised when a page opens that the shopper may leave within seconds: add_payment_info opens the summary step, left by
-// placing the order. They are handed to gtag at once; a copy is kept while gtag holds them, and a page left before gtag sent its
-// request passes the copy to the next page, see storeEventsAwaitingGtagRequest().
-const EVENTS_KEPT_UNTIL_GTAG_REQUEST: ReadonlySet<string> = new Set(['add_payment_info']);
-// A little longer than the five seconds gtag holds the hits of a page.
-const GTAG_HIT_HOLD_MILLISECONDS = 6000;
-const GTAG_REQUEST_PATH = '/g/collect';
+// Events raised when a page opens that the shopper may leave within seconds, e.g. a checkout step continued with the data it
+// already holds, or the summary step left by placing the order. They are handed to gtag at once; a copy is kept until gtag
+// reports the event sent, and a page left before passes the copy to the next page, see storeEventsAwaitingGtagRequest().
+const EVENTS_KEPT_UNTIL_GTAG_REQUEST: ReadonlySet<string> = new Set([
+    'begin_checkout',
+    'add_shipping_info',
+    'add_payment_info',
+    'purchase',
+]);
+// gtag also calls the event callback when this time has passed without sending the event; far longer than the five seconds
+// gtag holds the hits of a page, so the callback means the event was sent.
+const GTAG_EVENT_CALLBACK_TIMEOUT_MILLISECONDS = 60000;
 
 // The Measurement IDs gtag is configured for on this page: a component mounted again, e.g. by a re-render, does not configure
 // gtag again, which would send a second page_view.
@@ -726,33 +731,35 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         this.pendingEvents.push(pendingEvent);
     }
 
+    // A request of the page does not tell which events it carries: gtag sends the page_view at once and holds the other events,
+    // so only the event callback tells that this event was sent.
     protected handOverToGtag(event: PendingEvent): void {
-        window.gtag('event', event.name, event.params);
-
         if (!EVENTS_KEPT_UNTIL_GTAG_REQUEST.has(event.name)) {
+            window.gtag('event', event.name, event.params);
+
             return;
         }
 
-        this.eventsAwaitingGtagRequest.push({ event, handedOverAt: performance.now() });
+        const eventAwaitingGtagRequest: EventAwaitingGtagRequest = { event, isSent: false };
+
+        this.eventsAwaitingGtagRequest.push(eventAwaitingGtagRequest);
+        window.gtag('event', event.name, {
+            ...event.params,
+            event_callback: () => {
+                eventAwaitingGtagRequest.isSent = true;
+            },
+            event_timeout: GTAG_EVENT_CALLBACK_TIMEOUT_MILLISECONDS,
+        });
     }
 
     // Only when the page is left: a hidden page that is shown again still sends its hits, so storing them then would count them twice.
-    // An event gtag has started a request for since it was handed over, or one held longer than gtag holds hits, has been sent.
     protected storeEventsAwaitingGtagRequest(): void {
-        const now = performance.now();
         const eventsToStore = this.eventsAwaitingGtagRequest
-            .filter(({ handedOverAt }) => now - handedOverAt < GTAG_HIT_HOLD_MILLISECONDS)
-            .filter(({ handedOverAt }) => !this.hasGtagRequestStartedSince(handedOverAt))
+            .filter(({ isSent }) => !isSent)
             .map(({ event }) => event);
 
         this.eventsAwaitingGtagRequest = [];
         this.storeEvents(eventsToStore);
-    }
-
-    protected hasGtagRequestStartedSince(time: number): boolean {
-        return performance
-            .getEntriesByType('resource')
-            .some((entry) => entry.startTime >= time && entry.name.includes(GTAG_REQUEST_PATH));
     }
 
     // A running gtag script replaces the push method of the data layer with its own.

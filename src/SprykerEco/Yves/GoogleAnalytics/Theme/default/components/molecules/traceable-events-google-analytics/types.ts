@@ -142,8 +142,8 @@ export interface PendingEvent {
     raisedAt: number;
 }
 
-// An event handed to gtag, and when, as `performance.now()`: gtag holds its hit for a few seconds before it sends a request.
+// An event handed to gtag, which holds its hit for a few seconds before it sends a request; `isSent` once gtag reports it sent.
 export interface EventAwaitingGtagRequest {
     event: PendingEvent;
-    handedOverAt: number;
+    isSent: boolean;
 }
