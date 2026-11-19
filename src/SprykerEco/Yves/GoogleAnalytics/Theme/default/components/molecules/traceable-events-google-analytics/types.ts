@@ -141,3 +141,9 @@ export interface PendingEvent {
     params: Record<string, unknown>;
     raisedAt: number;
 }
+
+// An event handed to gtag, and when, as `performance.now()`: gtag holds its hit for a few seconds before it sends a request.
+export interface EventAwaitingGtagRequest {
+    event: PendingEvent;
+    handedOverAt: number;
+}

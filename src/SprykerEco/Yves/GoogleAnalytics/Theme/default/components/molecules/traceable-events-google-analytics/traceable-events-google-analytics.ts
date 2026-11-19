@@ -20,6 +20,7 @@ import {
     CartEventData,
     CartItemsChangeData,
     EnabledEvents,
+    EventAwaitingGtagRequest,
     GtagFunction,
     GtagItem,
     InitialData,
@@ -83,16 +84,20 @@ const MAX_REPORTED_TRANSACTIONS = 20;
 // The list events tell what was shown, not what the shopper wants to buy, so a value summed from their products would mislead reports.
 const EVENTS_WITHOUT_VALUE: ReadonlySet<string> = new Set(['view_item_list', 'select_item']);
 
-// gtag holds the hits of a page for about five seconds, and the request of a page that is left before is never sent. These events
-// are usually followed by leaving the page, so they wait for the page to be left and are sent by the next page, see
-// holdEventForNavigation(). Each waits as long as given here; a page still shown then sends it itself.
-// - select_item: raised by a click on a product card, which opens the product in the same tab right away; a page still shown after
-//   the wait was kept, e.g. by Cmd+click to a new tab.
-// - add_payment_info: raised when the summary step opens, which the shopper leaves by placing the order, often within seconds.
-const NAVIGATION_WAIT_MILLISECONDS_BY_EVENT: ReadonlyMap<string, number> = new Map([
-    ['select_item', 2000],
-    ['add_payment_info', 30000],
-]);
+// Events raised by a click that usually opens another page in the same tab, e.g. a product card: gtag holds its hits for about
+// five seconds, and the request of a page that is left before is never sent. These events wait for the page to be left and are
+// sent by the next page, see holdEventForNavigation().
+const EVENTS_RAISED_BY_NAVIGATION: ReadonlySet<string> = new Set(['select_item']);
+// How long such an event waits for the page to be left; a click that keeps the page, e.g. Cmd+click to a new tab, then sends it here.
+const NAVIGATION_WAIT_MILLISECONDS = 2000;
+
+// Events raised when a page opens that the shopper may leave within seconds: add_payment_info opens the summary step, left by
+// placing the order. They are handed to gtag at once; a copy is kept while gtag holds them, and a page left before gtag sent its
+// request passes the copy to the next page, see storeEventsAwaitingGtagRequest().
+const EVENTS_KEPT_UNTIL_GTAG_REQUEST: ReadonlySet<string> = new Set(['add_payment_info']);
+// A little longer than the five seconds gtag holds the hits of a page.
+const GTAG_HIT_HOLD_MILLISECONDS = 6000;
+const GTAG_REQUEST_PATH = '/g/collect';
 
 // The Measurement IDs gtag is configured for on this page: a component mounted again, e.g. by a re-render, does not configure
 // gtag again, which would send a second page_view.
@@ -113,6 +118,8 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     protected pendingEvents: PendingEvent[] = [];
     // Events waiting for the page to be left, see holdEventForNavigation().
     protected eventsHeldForNavigation: PendingEvent[] = [];
+    // Events handed to gtag whose request may not have been sent yet, see storeEventsAwaitingGtagRequest().
+    protected eventsAwaitingGtagRequest: EventAwaitingGtagRequest[] = [];
     protected isGtagScriptLoading = true;
     protected listenersController = new AbortController();
     // Stops the load and error listeners once the gtag script has settled, so the page's other resources do not go through them.
@@ -669,15 +676,13 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         this.sendEvent(eventName, eventParams);
     }
 
-    // An event raised while the gtag script loads waits, see queueEvent(); one usually followed by leaving the page waits for the
+    // An event raised while the gtag script loads waits, see queueEvent(); one raised by a click that leaves the page waits for the
     // next page, see holdEventForNavigation().
     protected sendEvent(eventName: string, eventParams: Record<string, unknown>): void {
         const event = { name: eventName, params: eventParams, raisedAt: Date.now() };
 
-        const navigationWaitMilliseconds = NAVIGATION_WAIT_MILLISECONDS_BY_EVENT.get(eventName);
-
-        if (navigationWaitMilliseconds !== undefined) {
-            this.holdEventForNavigation(event, navigationWaitMilliseconds);
+        if (EVENTS_RAISED_BY_NAVIGATION.has(eventName)) {
+            this.holdEventForNavigation(event);
 
             return;
         }
@@ -685,17 +690,17 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         this.queueEvent(event);
     }
 
-    // A page left while the event waits stores it in the tab, with this page's URL and title, and the next page sends it.
-    // A page still shown after the wait sends it itself.
+    // The page usually starts to leave right after the click: the event is then stored in the tab, with this page's URL and title,
+    // and the next page sends it. A page still shown after the wait, e.g. after Cmd+click to a new tab, sends it itself.
     // The listener is added only while an event waits, as a beforeunload listener keeps some browsers from caching the page.
-    protected holdEventForNavigation(event: PendingEvent, waitMilliseconds: number): void {
+    protected holdEventForNavigation(event: PendingEvent): void {
         this.eventsHeldForNavigation.push(event);
 
         window.addEventListener('beforeunload', () => this.storePendingEvents(), {
             once: true,
             signal: this.listenersController.signal,
         });
-        window.setTimeout(() => this.sendEventHeldForNavigation(event), waitMilliseconds);
+        window.setTimeout(() => this.sendEventHeldForNavigation(event), NAVIGATION_WAIT_MILLISECONDS);
     }
 
     // An event already stored for the next page is no longer held, so none is sent twice.
@@ -713,12 +718,41 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     // Sends the event, or keeps it while the gtag script loads; a stored event keeps the time it was raised, so it still expires.
     protected queueEvent(pendingEvent: PendingEvent): void {
         if (!this.isGtagScriptLoading) {
-            window.gtag('event', pendingEvent.name, pendingEvent.params);
+            this.handOverToGtag(pendingEvent);
 
             return;
         }
 
         this.pendingEvents.push(pendingEvent);
+    }
+
+    protected handOverToGtag(event: PendingEvent): void {
+        window.gtag('event', event.name, event.params);
+
+        if (!EVENTS_KEPT_UNTIL_GTAG_REQUEST.has(event.name)) {
+            return;
+        }
+
+        this.eventsAwaitingGtagRequest.push({ event, handedOverAt: performance.now() });
+    }
+
+    // Only when the page is left: a hidden page that is shown again still sends its hits, so storing them then would count them twice.
+    // An event gtag has started a request for since it was handed over, or one held longer than gtag holds hits, has been sent.
+    protected storeEventsAwaitingGtagRequest(): void {
+        const now = performance.now();
+        const eventsToStore = this.eventsAwaitingGtagRequest
+            .filter(({ handedOverAt }) => now - handedOverAt < GTAG_HIT_HOLD_MILLISECONDS)
+            .filter(({ handedOverAt }) => !this.hasGtagRequestStartedSince(handedOverAt))
+            .map(({ event }) => event);
+
+        this.eventsAwaitingGtagRequest = [];
+        this.storeEvents(eventsToStore);
+    }
+
+    protected hasGtagRequestStartedSince(time: number): boolean {
+        return performance
+            .getEntriesByType('resource')
+            .some((entry) => entry.startTime >= time && entry.name.includes(GTAG_REQUEST_PATH));
     }
 
     // A running gtag script replaces the push method of the data layer with its own.
@@ -772,6 +806,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         // A page shown again, by the tab or from the back-forward cache, takes them back.
         document.addEventListener('visibilitychange', () => this.onVisibilityChange(), { signal });
         window.addEventListener('pagehide', () => this.storePendingEvents(), { signal });
+        window.addEventListener('pagehide', () => this.storeEventsAwaitingGtagRequest(), { signal });
         window.addEventListener('pageshow', (event: PageTransitionEvent) => this.onPageShow(event), { signal });
     }
 
@@ -831,15 +866,22 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             return;
         }
 
-        for (const { name, params } of pendingEvents) {
-            window.gtag('event', name, params);
+        for (const pendingEvent of pendingEvents) {
+            this.handOverToGtag(pendingEvent);
         }
     }
 
-    // The events go with the page they happened on, its URL, referrer and title, as the next page sends them under its own otherwise.
     protected storePendingEvents(): void {
         const eventsToStore = [...this.pendingEvents, ...this.eventsHeldForNavigation];
 
+        // Taken off the page, so a page restored from the back-forward cache does not send them as well as the next page.
+        this.pendingEvents = [];
+        this.eventsHeldForNavigation = [];
+        this.storeEvents(eventsToStore);
+    }
+
+    // The events go with the page they happened on, its URL, referrer and title, as the next page sends them under its own otherwise.
+    protected storeEvents(eventsToStore: PendingEvent[]): void {
         if (!eventsToStore.length) {
             return;
         }
@@ -855,9 +897,6 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             raisedAt,
         }));
 
-        // Taken off the page, so a page restored from the back-forward cache does not send them as well as the next page.
-        this.pendingEvents = [];
-        this.eventsHeldForNavigation = [];
         this.createPendingEventsStorage().add(pageEvents);
     }
 
