@@ -9,7 +9,7 @@ import {
     CONSENT_PURPOSE_STATISTICS,
     ConsentPurpose,
 } from 'TraceableEventWidget/components/molecules/traceable-events-consent/consent-purposes';
-import { debug } from 'ShopUi/app/logger';
+import { debug, warn } from 'ShopUi/app/logger';
 import { CATEGORY_LEVEL_KEYS, CategoryLevelKey } from './category-levels';
 import { buildGtagItems, roundQuantitiesToWholePieces, sumItemsValue, VARIANT_VALUE_SEPARATOR } from './gtag-items';
 import {
@@ -158,7 +158,13 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         this.pricePrecision = this.readPricePrecision();
         this.priceDecimals = Math.round(Math.log10(this.pricePrecision));
         this.additionalPageUrlQueryParameters = this.readAdditionalPageUrlQueryParameters();
-        this.personalDataPagePathPatterns = createPagePathPatterns(this.readPersonalDataPagePathPatterns());
+        this.personalDataPagePathPatterns = createPagePathPatterns(
+            this.readPersonalDataPagePathPatterns(),
+            (patternSource: string, error: unknown) =>
+                warn(
+                    `${this.name}: the personal data page path pattern ${patternSource} is no valid regular expression and is left out, so the paths it should cover keep their personal data: ${error}`,
+                ),
+        );
         this.isCouponReported = this.getAttribute('coupon-reported') === 'true';
         this.watchPage();
 
@@ -545,10 +551,14 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             return;
         }
 
-        this.sendItemsEvent('add_shipping_info', data.currency, data.checkoutProducts ?? [], {
+        const isAddShippingInfoSent = this.sendItemsEvent('add_shipping_info', data.currency, data.checkoutProducts ?? [], {
             ...this.getCheckoutParams(data),
             shipping_tier: shippingTier,
         });
+
+        if (isAddShippingInfoSent) {
+            this.keepReportedCheckoutStepChoice(REPORTED_SHIPPING_TIER_STORAGE_KEY, shippingTier);
+        }
     }
 
     // The submit only requests the payment method: the shop may still show the step again, e.g. when required details are missing.
@@ -572,14 +582,19 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             return;
         }
 
-        this.sendItemsEvent('add_payment_info', data.currency, data.checkoutProducts ?? [], {
+        const isAddPaymentInfoSent = this.sendItemsEvent('add_payment_info', data.currency, data.checkoutProducts ?? [], {
             ...this.getCheckoutParams(data),
             payment_type: paymentType,
         });
+
+        if (isAddPaymentInfoSent) {
+            this.keepReportedCheckoutStepChoice(REPORTED_PAYMENT_TYPE_STORAGE_KEY, paymentType);
+        }
     }
 
     // Takes the step's submit request. True when the shop accepted the step, i.e. another checkout page is shown, and the choice
-    // differs from the one last reported in this checkout, which it then keeps.
+    // differs from the one last reported in this checkout. The choice is kept only once its event was sent, see
+    // keepReportedCheckoutStepChoice(): an event the consent dropped is reported on the next submit of the same choice.
     protected takeNewCheckoutStepChoice(
         data: PageLoadData,
         step: string,
@@ -598,13 +613,11 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
 
         const isChoiceChanged = choice !== tabStorage.get(reportedChoiceStorageKey);
 
-        if (!isChoiceChanged) {
-            return false;
-        }
+        return isChoiceChanged;
+    }
 
-        tabStorage.set(reportedChoiceStorageKey, choice);
-
-        return true;
+    protected keepReportedCheckoutStepChoice(reportedChoiceStorageKey: string, choice: string): void {
+        this.createTabStorage().set(reportedChoiceStorageKey, choice);
     }
 
     protected getCheckoutParams(data: PageLoadData): Record<string, unknown> {
@@ -648,7 +661,14 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             purchaseParams.coupon = purchase.coupon;
         }
 
-        this.sendItemsEvent('purchase', data.currency, purchaseProducts, purchaseParams);
+        // An order whose purchase is dropped, e.g. as its consent purpose is not granted yet, is not kept as reported, so a consent
+        // given later on the page still reports it.
+        const isPurchaseSent = this.sendItemsEvent('purchase', data.currency, purchaseProducts, purchaseParams);
+
+        if (!isPurchaseSent) {
+            return;
+        }
+
         reportedTransactions.add(purchase.transactionId);
     }
 
@@ -740,11 +760,11 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         currency: string,
         products: ProductDetails[],
         params: Record<string, unknown> = {},
-    ): void {
+    ): boolean {
         const items = this.getItems(products);
 
         if (!items.length) {
-            return;
+            return false;
         }
 
         // The value is calculated from the exact quantities, e.g. 1.5 m; only the item quantities GA4 receives are whole pieces.
@@ -761,14 +781,14 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             eventParams.value = value;
         }
 
-        this.sendEvent(eventName, eventParams);
+        return this.sendEvent(eventName, eventParams);
     }
 
     // An event raised while the gtag script loads waits, see queueEvent(); one raised by a click that leaves the page waits for the
-    // next page, see holdEventForNavigation().
-    protected sendEvent(eventName: string, eventParams: Record<string, unknown>): void {
+    // next page, see holdEventForNavigation(). False when the consent does not allow the event, so it is dropped.
+    protected sendEvent(eventName: string, eventParams: Record<string, unknown>): boolean {
         if (!this.isGtagEventAllowed(eventName)) {
-            return;
+            return false;
         }
 
         const event = { name: eventName, params: eventParams, raisedAt: Date.now() };
@@ -776,10 +796,12 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         if (EVENTS_RAISED_BY_NAVIGATION.has(eventName)) {
             this.holdEventForNavigation(event);
 
-            return;
+            return true;
         }
 
         this.queueEvent(event);
+
+        return true;
     }
 
     // The page usually starts to leave right after the click: the event is then stored in the tab, with this page's URL and title,

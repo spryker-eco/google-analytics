@@ -40,7 +40,14 @@ The ecommerce events report a product by its abstract product SKU and name, with
 
 ## Upgrading from 1.4.0
 
-Run `vendor/bin/console configuration:sync` after the update, so the Back Office shows the new event settings (Add to Cart, Remove from Cart) and the renamed Search setting. An event whose setting is not synced yet is not tracked, like the setting's default; switch the events you want on in the Back Office.
+Run `vendor/bin/console configuration:sync` after the update, so the Back Office shows the new event settings and the renamed Search setting, under **Configuration** > **Integrations** > **Google Analytics**:
+
+- **Product Events**, next to Search: View Item, View Item List, Select Item.
+- **Cart Events**, a new group: Add to Cart, Remove from Cart, View Cart.
+- **Customer List Events**, a new group: Add to Wishlist.
+- **Checkout Events**, a new group: Begin Checkout, Add Shipping Info, Add Payment Info, Purchase.
+
+Every event is off by default, so the update tracks nothing new until an event is switched on. An event whose setting is not synced yet is not tracked either, like the setting's default; after the sync, switch the events you want on in the Back Office, per store where needed.
 
 The Back Office setting key `search_event_ebabled` is renamed to `search_event_enabled`. A value stored under the old key is not read any more, so Search event tracking falls back to its default (disabled) after the upgrade.
 
@@ -172,7 +179,7 @@ Other paths of the project with personal data in a segment, e.g. a customer-chos
     }
 ```
 
-Without the widget, the module's patterns apply. Any other personal data in a page title, e.g. a customer name a project template shows, is removed by overriding `getTitleWithoutPersonalData()` of the `traceable-events-google-analytics` component.
+Without the widget, the module's patterns apply. A pattern that is no valid regular expression is left out, so the paths it should cover keep their personal data; the storefront then writes a warning naming the pattern to the browser console on every page. Any other personal data in a page title, e.g. a customer name a project template shows, is removed by overriding `getTitleWithoutPersonalData()` of the `traceable-events-google-analytics` component.
 
 ## Voucher codes
 

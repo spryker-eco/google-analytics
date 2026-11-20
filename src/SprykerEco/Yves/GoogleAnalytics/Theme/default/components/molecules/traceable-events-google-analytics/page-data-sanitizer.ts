@@ -27,15 +27,22 @@ export const DEFAULT_PERSONAL_DATA_PAGE_PATH_PATTERNS: readonly string[] = [
     '(/wishlist/[\\w-]+/)([^/]+)',
 ];
 
-// A pattern that is no valid regular expression, e.g. from a project config, is left out instead of breaking every hit.
-export const createPagePathPatterns = (patternSources: readonly string[]): RegExp[] => {
+// Reports a pattern that is left out; the adapter passes one that writes it to the console.
+export type InvalidPagePathPatternReporter = (patternSource: string, error: unknown) => void;
+
+// A pattern that is no valid regular expression, e.g. from a project config, is left out instead of breaking every hit, and
+// reported: the paths it should cover keep their personal data.
+export const createPagePathPatterns = (
+    patternSources: readonly string[],
+    reportInvalidPattern: InvalidPagePathPatternReporter,
+): RegExp[] => {
     const pagePathPatterns: RegExp[] = [];
 
     for (const patternSource of patternSources) {
         try {
             pagePathPatterns.push(new RegExp(patternSource));
-        } catch {
-            continue;
+        } catch (error) {
+            reportInvalidPattern(patternSource, error);
         }
     }
 
