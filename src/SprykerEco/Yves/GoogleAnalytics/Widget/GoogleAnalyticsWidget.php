@@ -22,6 +22,10 @@ class GoogleAnalyticsWidget extends AbstractWidget
 
     protected const string PARAMETER_PRICE_PRECISION = 'pricePrecision';
 
+    protected const string PARAMETER_PERSONAL_DATA_PAGE_PATH_PATTERNS = 'personalDataPagePathPatterns';
+
+    protected const string PARAMETER_IS_COUPON_REPORTED = 'isCouponReported';
+
     public function __construct()
     {
         $this->addParameter(
@@ -29,6 +33,11 @@ class GoogleAnalyticsWidget extends AbstractWidget
             $this->getConfig()->getAdditionalPageUrlQueryParameters(),
         );
         $this->addParameter(static::PARAMETER_PRICE_PRECISION, $this->getConfig()->getPricePrecision());
+        $this->addParameter(
+            static::PARAMETER_PERSONAL_DATA_PAGE_PATH_PATTERNS,
+            $this->getConfig()->getPersonalDataPagePathPatterns(),
+        );
+        $this->addParameter(static::PARAMETER_IS_COUPON_REPORTED, $this->getConfig()->isCouponReported());
     }
 
     public static function getName(): string

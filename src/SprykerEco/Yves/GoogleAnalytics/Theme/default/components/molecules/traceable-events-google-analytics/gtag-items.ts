@@ -42,6 +42,20 @@ const convertPrice = (price: unknown, pricePrecision: number, priceDecimals: num
     return Number((price / pricePrecision).toFixed(priceDecimals));
 };
 
+// A position in a list, from 0; a clicked card sends it as the attribute text, and a card without a position sends none.
+const parseIndex = (index: unknown): number | undefined => {
+    const isIndexMissing = index === undefined || index === null || index === '';
+
+    if (isIndexMissing) {
+        return undefined;
+    }
+
+    const position = Number(index);
+    const isPosition = Number.isInteger(position) && position >= 0;
+
+    return isPosition ? position : undefined;
+};
+
 export interface GtagItemSettings {
     // The parts per currency unit of a price in cents, e.g. 100, and the decimals a price in currency units has, e.g. 2.
     pricePrecision: number;
@@ -100,6 +114,12 @@ export const buildGtagItems = (products: ProductDetails[], settings: GtagItemSet
         }
 
         Object.assign(item, getCategoryLevels(product.categories ?? [], settings.categoryLevelKeys));
+
+        const index = parseIndex(product.index);
+
+        if (index !== undefined) {
+            item.index = index;
+        }
 
         if (price !== undefined) {
             item.price = price;

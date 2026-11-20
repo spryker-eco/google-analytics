@@ -51,11 +51,59 @@ export interface ProductDetails {
     price?: number;
     quantity?: number;
     newQuantity?: number;
+    // A product card of a tracked list: the list it belongs to and its position in it, from 0; a clicked card sends the position as the
+    // attribute text.
+    itemListId?: string;
+    itemListName?: string;
+    index?: number | string;
 }
 
 export interface CartEventData extends EventsHandlerData<EventName> {
     currency: string;
     products?: ProductDetails[];
+}
+
+// The data every page passes with its page load; which keys a page sets depends on the page.
+export interface PageLoadData extends EventsHandlerData<EventName> {
+    currency: string;
+    // On the product detail page: the product shown.
+    products?: ProductDetails[];
+    // On the cart page: the products of the cart shown.
+    cartProducts?: ProductDetails[];
+    // On a checkout step: the products of the cart being checked out, and its voucher codes, comma separated.
+    checkoutProducts?: ProductDetails[];
+    checkoutCoupon?: string;
+    // The chosen shipment and payment methods, as the shopper sees them; a split delivery or payment joins them, e.g. "Standard, Express".
+    checkoutShippingTier?: string;
+    checkoutPaymentType?: string;
+    // The checkout step shown, set for a step that reports its own accepted submit: SHIPMENT or PAYMENT.
+    checkoutStep?: string;
+    // On the order confirmation page: the placed order and its products.
+    purchase?: Purchase;
+    purchaseProducts?: ProductDetails[];
+}
+
+// Amounts in cents; the product prices are paid per unit without tax, so shipping and tax are sent on their own.
+export interface Purchase {
+    transactionId: string;
+    shipping?: number;
+    tax?: number;
+    // The voucher codes of the order, comma separated.
+    coupon?: string;
+}
+
+export interface ItemList {
+    id: string;
+    name: string;
+    products: ProductDetails[];
+}
+
+// The product cards the shopper saw, per list, as the traceable-item-list-view-tracker reports them.
+export interface ItemListViewData extends EventsHandlerData<EventName> {
+    currency: string;
+    eventDetail: {
+        itemLists: ItemList[];
+    };
 }
 
 // Cart lines whose quantity the cart confirmed as changed; `quantity` is the changed amount.
@@ -83,6 +131,8 @@ export interface GtagItem {
     concrete_sku?: string;
     price?: number;
     quantity: number;
+    // The position of the product in its list, from 0, for the item list events.
+    index?: number;
 }
 
 // An event raised while the gtag script is loading; `params` are its gtag event parameters, `raisedAt` when it was raised.
@@ -90,4 +140,10 @@ export interface PendingEvent {
     name: string;
     params: Record<string, unknown>;
     raisedAt: number;
+}
+
+// An event handed to gtag, which holds its hit for a few seconds before it sends a request; `isSent` once gtag reports it sent.
+export interface EventAwaitingGtagRequest {
+    event: PendingEvent;
+    isSent: boolean;
 }

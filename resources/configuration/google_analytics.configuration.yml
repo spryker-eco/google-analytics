@@ -93,6 +93,42 @@ features:
                       - global
                       - store
                   settings:
+                      - key: view_item_event_enabled
+                        name: View Item
+                        description: 'A product detail page is opened. GA4 event: view_item.'
+                        type: boolean
+                        default_value: false
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 0
+                        scopes:
+                            - global
+                            - store
+                      - key: view_item_list_event_enabled
+                        name: View Item List
+                        description: 'Product cards are seen in a product list, e.g. category or search results, similar products or a CMS product list; every product once per list and page. GA4 event: view_item_list.'
+                        type: boolean
+                        default_value: false
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 1
+                        scopes:
+                            - global
+                            - store
+                      - key: select_item_event_enabled
+                        name: Select Item
+                        description: 'A product card is clicked in a product list. GA4 event: select_item.'
+                        type: boolean
+                        default_value: false
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 2
+                        scopes:
+                            - global
+                            - store
                       - key: search_event_enabled
                         name: Search
                         description: 'Storefront search is performed. GA4 events: search_results, zero_search_results.'
@@ -138,6 +174,102 @@ features:
                         secret: false
                         storefront: true
                         order: 1
+                        scopes:
+                            - global
+                            - store
+                      - key: view_cart_event_enabled
+                        name: View Cart
+                        description: 'The customer opens the cart page with at least one product; a reload, the Back button and the return to the cart after a cart change are not counted. GA4 event: view_cart.'
+                        type: boolean
+                        default_value: false
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 2
+                        scopes:
+                            - global
+                            - store
+                - key: customer_list_events
+                  name: Customer List Events
+                  description: Customer list events, e.g. adding a product to a wishlist.
+                  section: event_tracking
+                  toggle_all: true
+                  layout: compact
+                  enabled: true
+                  order: 4
+                  scopes:
+                      - global
+                      - store
+                  settings:
+                      - key: add_to_wishlist_event_enabled
+                        name: Add to Wishlist
+                        description: 'A product is added to a wishlist, on the product detail page or as an alternative on the wishlist page. GA4 event: add_to_wishlist.'
+                        type: boolean
+                        default_value: false
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 0
+                        scopes:
+                            - global
+                            - store
+                - key: checkout_events
+                  name: Checkout Events
+                  description: Checkout funnel events.
+                  section: event_tracking
+                  toggle_all: true
+                  layout: compact
+                  enabled: true
+                  order: 5
+                  scopes:
+                      - global
+                      - store
+                  settings:
+                      - key: begin_checkout_event_enabled
+                        name: Begin Checkout
+                        description: 'The customer clicks the checkout button and the first checkout step opens; moving between steps, reloading a step and a checkout the shop does not start are not counted. GA4 event: begin_checkout.'
+                        type: boolean
+                        default_value: false
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 0
+                        scopes:
+                            - global
+                            - store
+                      - key: add_shipping_info_event_enabled
+                        name: Add Shipping Info
+                        description: 'The customer submits the shipment step and the next step opens; continuing with the same shipment method, reloading a step and a shipment step shown again with errors are not counted. A split delivery sends its methods together. GA4 event: add_shipping_info.'
+                        type: boolean
+                        default_value: false
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 1
+                        scopes:
+                            - global
+                            - store
+                      - key: add_payment_info_event_enabled
+                        name: Add Payment Info
+                        description: 'The customer submits the payment step and the next step opens; continuing with the same payment method, reloading a step and a payment step shown again with errors are not counted. Only the method name is sent, never payment details. GA4 event: add_payment_info.'
+                        type: boolean
+                        default_value: false
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 2
+                        scopes:
+                            - global
+                            - store
+                      - key: purchase_event_enabled
+                        name: Purchase
+                        description: 'An order is placed; reported once per order. GA4 event: purchase.'
+                        type: boolean
+                        default_value: false
+                        enabled: true
+                        secret: false
+                        storefront: true
+                        order: 3
                         scopes:
                             - global
                             - store
