@@ -9,10 +9,11 @@
     gtagId: null,
 } %}
 
-{% set shouldRender = data.gtagId is defined %}
+{# Without a Measurement ID nothing is loaded or sent; `is defined` was also true for the empty setting. #}
+{% set shouldRender = data.gtagId is not empty %}
 
-{# Event settings are named `<event>_event_ebabled`, e.g. `search_event_ebabled`. #}
-{% set eventSettingSuffix = '_event_ebabled' %}
+{# Event settings are named `<event>_event_enabled`, e.g. `search_event_enabled`. #}
+{% set eventSettingSuffix = '_event_enabled' %}
 
 {# Maps every event setting to its on/off state by event name, e.g. { search: true }; other settings of the tab never reach the page. #}
 {% set enabledEvents = {} %}
@@ -28,6 +29,18 @@
     {% endif %}
 {% endfor %}
 
+{# The query parameters a project keeps in the page URLs besides the campaign ones, from GoogleAnalyticsConfig; none while GoogleAnalyticsWidget is not registered. #}
+{% set additionalPageUrlQueryParameters = findWidget('GoogleAnalyticsWidget').parameters.additionalPageUrlQueryParameters ?? [] %}
+
+{# The price precision from GoogleAnalyticsConfig; while GoogleAnalyticsWidget is not registered, the Money precision it returns by default. #}
+{% set pricePrecision = findWidget('GoogleAnalyticsWidget').parameters.pricePrecision ?? constant('Spryker\\Shared\\Money\\Converter\\IntegerToDecimalConverter::PRICE_PRECISION') %}
+
+{# The page paths with personal data in a segment, from GoogleAnalyticsConfig; while GoogleAnalyticsWidget is not registered, the component uses the module's default patterns. #}
+{% set personalDataPagePathPatterns = findWidget('GoogleAnalyticsWidget').parameters.personalDataPagePathPatterns ?? null %}
+
+{# Voucher codes are sent only when GoogleAnalyticsConfig turns it on; off while GoogleAnalyticsWidget is not registered. #}
+{% set isCouponReported = findWidget('GoogleAnalyticsWidget').parameters.isCouponReported ?? false %}
+
 {% define attributes = {
     initial: shouldRender
         ? {
@@ -39,7 +52,18 @@
         : {},
     'traceable-adapter': true,
     'data-gtag-script-src': "https://www.googletagmanager.com/gtag/js?id=#{data.gtagId}",
+    'price-precision': pricePrecision,
+    'page-url-query-parameters': additionalPageUrlQueryParameters | json_encode,
+    'personal-data-page-path-patterns': personalDataPagePathPatterns is null ? null : personalDataPagePathPatterns | json_encode,
+    'coupon-reported': isCouponReported ? 'true' : 'false',
 } %}
+
+{#
+    price-precision - storefront prices are integers of this many parts per currency unit, as Money stores them.
+    page-url-query-parameters - JSON list of the query parameters kept in the page URLs besides the campaign ones.
+    personal-data-page-path-patterns - JSON list of regular expressions of page paths with personal data in a segment; missing, the module's defaults apply.
+    coupon-reported - 'true' when voucher codes are sent as `coupon` with the checkout and purchase events.
+#}
 
 {% block component %}
     {% if shouldRender %}
@@ -47,11 +71,5 @@
     {% endif %}
 {% endblock %}
 
-{% block body %}
-    {% include molecule('script-loader') with {
-        attributes: {
-            'async': true,
-            'src': attributes['data-gtag-script-src'],
-        },
-    } only %}
-{% endblock %}
+{# gtag.js is loaded by the component once the orchestrator allows it, e.g. after the shopper's consent. #}
+{% block body %}{% endblock %}
