@@ -4,6 +4,10 @@ import {
     BaseTraceableEventAdapter,
     TraceableEventHandlers,
 } from 'TraceableEventWidget/components/molecules/traceable-events-orchestrator/base-traceable-event-adapter';
+import {
+    CONSENT_PURPOSE_STATISTICS,
+    ConsentPurpose,
+} from 'TraceableEventWidget/components/molecules/traceable-events-consent/consent-purposes';
 import { debug } from 'ShopUi/app/logger';
 import { CATEGORY_LEVEL_KEYS, CategoryLevelKey } from './category-levels';
 import { buildGtagItems, roundQuantitiesToWholePieces, sumItemsValue, VARIANT_VALUE_SEPARATOR } from './gtag-items';
@@ -37,6 +41,8 @@ declare global {
     interface Window {
         dataLayer: unknown[];
         gtag: GtagFunction;
+        // Google Analytics' opt-out flag, `ga-disable-<Measurement ID>`: while true, gtag sends nothing for that Measurement ID.
+        [gaDisableFlag: `ga-disable-${string}`]: boolean | undefined;
     }
 }
 
@@ -67,6 +73,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     protected listenersController = new AbortController();
     // Stops the load and error listeners once the gtag script has settled, so the page's other resources do not go through them.
     protected gtagScriptListenersController = new AbortController();
+    protected isGtagSetUp = false;
 
     override init(): void {
         const { appId, store, locale, events } = this.initialData;
@@ -79,19 +86,54 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         this.pricePrecision = this.readPricePrecision();
         this.priceDecimals = Math.round(Math.log10(this.pricePrecision));
         this.additionalPageUrlQueryParameters = this.readAdditionalPageUrlQueryParameters();
+        this.watchPage();
 
+        super.init();
+    }
+
+    // GA4 measures how the shop is used; a project that links it to advertising, e.g. Google Ads remarketing, declares marketing as well.
+    override get consentPurposes(): ConsentPurpose[] {
+        return [CONSENT_PURPOSE_STATISTICS];
+    }
+
+    // The purposes a GA4 event serves, by its GA4 name, e.g. add_to_cart or a project's begin_checkout; a project groups single
+    // events differently in its consent component.
+    protected getGtagEventConsentPurposes(_gtagEventName: string): ConsentPurpose[] {
+        return this.consentPurposes;
+    }
+
+    protected isGtagEventAllowed(gtagEventName: string): boolean {
+        return this.isProviderEventAllowed(gtagEventName, this.getGtagEventConsentPurposes(gtagEventName));
+    }
+
+    // Started once the orchestrator allows the adapter, e.g. after the shopper's consent: before, gtag.js is not requested, no Google
+    // Analytics cookie is written, no page view is sent and the events a previous page stored stay stored.
+    override activate(): void {
+        window[`ga-disable-${this.appId}`] = false;
+
+        // Consent given again after a withdrawal on the same page: gtag is set up and its script loaded already.
+        if (this.isGtagSetUp) {
+            return;
+        }
+
+        this.isGtagSetUp = true;
         this.configureGtag();
 
-        this.isGtagScriptLoading = !this.isGtagScriptRunning() && !this.hasGtagScriptSettledWithoutRunning();
-        this.watchPage();
+        // A gtag script already in the DOM, e.g. added by another component, is not added again; its state decides.
+        const isGtagScriptToLoad = !this.isGtagScriptInDom();
+
+        this.isGtagScriptLoading =
+            isGtagScriptToLoad || (!this.isGtagScriptRunning() && !this.hasGtagScriptSettledWithoutRunning());
 
         if (this.isGtagScriptLoading) {
             this.watchGtagScript();
         }
 
-        this.sendStoredEvents();
+        if (isGtagScriptToLoad) {
+            this.loadGtagScript();
+        }
 
-        super.init();
+        this.sendStoredEvents();
     }
 
     protected configureGtag(): void {
@@ -114,6 +156,22 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             page_title: this.getTitleWithoutPersonalData(document.title),
         });
         window.gtag('config', this.appId);
+    }
+
+    // Consent withdrawn on the page: gtag sends nothing more, its automatic events included, e.g. a page_view on a history change.
+    // The cookies it already wrote are left to the consent management platform, which removes them on withdrawal.
+    override deactivate(): void {
+        window[`ga-disable-${this.appId}`] = true;
+    }
+
+    // Its load or error event settles the events raised while it loads, see watchGtagScript().
+    protected loadGtagScript(): void {
+        const gtagScript = document.createElement('script');
+
+        gtagScript.async = true;
+        gtagScript.src = this.gtagScriptSrc;
+
+        document.head.appendChild(gtagScript);
     }
 
     // A missing or invalid attribute, e.g. from a project template, falls back to cents instead of breaking every price.
@@ -270,6 +328,10 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
 
     // A running gtag script sends with a request that outlives a navigation; an event raised while it loads waits, see queueEvent().
     protected sendEvent(eventName: string, eventParams: Record<string, unknown>): void {
+        if (!this.isGtagEventAllowed(eventName)) {
+            return;
+        }
+
         this.queueEvent({ name: eventName, params: eventParams, raisedAt: Date.now() });
     }
 
@@ -293,8 +355,10 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         return Boolean(document.querySelector(`script[src="${this.gtagScriptSrc}"]`));
     }
 
-    // A gtag script already in the DOM, e.g. added by another component, that was fetched or outlived the page load without
-    // running never will, e.g. one a content blocker stopped; no load or error event is left to wait for.
+    // A gtag script already in the DOM when the adapter starts, e.g. added by another component, is not added again.
+    // When that script was fetched but never ran, e.g. it failed to load, no load or error event is left to wait for. A script a
+    // content blocker stopped may leave no resource timing entry, but the page load waits for every script in the DOM, so a
+    // script that does not run once the page has loaded never will.
     protected hasGtagScriptSettledWithoutRunning(): boolean {
         const isGtagScriptFetched = performance
             .getEntriesByName(this.gtagScriptSrc)
@@ -312,8 +376,9 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         return true;
     }
 
-    // Load and error events do not bubble, so they are captured on the document until the script settles; for a script that
-    // was in the DOM before, the page load tells whether it ran.
+    // Load and error events do not bubble, so they are captured on the document. activate() listens before it adds the script,
+    // so neither event can fire before this listens. A script that was already in the DOM may have failed before; the page load,
+    // which waits for it, tells.
     protected watchGtagScript(): void {
         const { signal } = this.gtagScriptListenersController;
 
