@@ -82,14 +82,14 @@ If GA4 reports, explorations or audiences of the project filter on such a parame
 | `add_to_cart`, `remove_from_cart` | See [Cart changes and the cart mode](#cart-changes-and-the-cart-mode) | |
 | `add_to_wishlist` | A product is added to a wishlist on the product detail page, or an alternative of a wishlist item on the wishlist page | |
 | `view_cart` | The cart page is opened with at least one product from a link or the address bar; a reload, the Back button and the return to the cart after a cart change are not counted | |
-| `begin_checkout` | The checkout button is clicked and a checkout step opens; a checkout the shop does not start, e.g. for an unavailable product, is not counted | `coupon` |
-| `add_shipping_info` | The shipment step is accepted, once per chosen set of shipment methods in a checkout | `coupon`, `shipping_tier`: the shipment method names, comma separated for a split delivery |
-| `add_payment_info` | The payment step is accepted, once per chosen payment method in a checkout | `coupon`, `payment_type`: the payment method names; never payment details |
-| `purchase` | The order confirmation page is shown, once per order also after a reload | `transaction_id` (the order reference), `shipping`, `tax`, `coupon` |
+| `begin_checkout` | The checkout button is clicked and a checkout step opens; a checkout the shop does not start, e.g. for an unavailable product, is not counted | `coupon`, see [Voucher codes](#voucher-codes) |
+| `add_shipping_info` | The shipment step is accepted, once per chosen set of shipment methods in a checkout | `coupon` (see [Voucher codes](#voucher-codes)), `shipping_tier`: the shipment method names, comma separated for a split delivery |
+| `add_payment_info` | The payment step is accepted, once per chosen payment method in a checkout | `coupon` (see [Voucher codes](#voucher-codes)), `payment_type`: the payment method names; never payment details |
+| `purchase` | The order confirmation page is shown, once per order also after a reload | `transaction_id` (the order reference), `shipping`, `tax`, `coupon` (see [Voucher codes](#voucher-codes)) |
 
 The product lists are the catalog and search results, the similar products and cart up-selling carousels, product alternatives and replacements, the products of each discount promotion, and the CMS and content product lists; each item of a list event carries its position in the list, from 0, as `index`. In the cart, checkout and purchase events a product bundle is one item. In the cart, checkout and purchase events the item price is the price per unit after discounts; `view_cart` and the checkout events send it as the shopper sees it, with tax in gross mode, and `purchase` sends it without tax, as shipping and tax are sent on their own.
 
-`begin_checkout`, `add_shipping_info` and `add_payment_info` pass the click or the submitted step to the next page in the session storage of the tab, and `purchase` keeps the 20 latest order references in the local storage. Where the storage is switched off, e.g. in a private window that blocks it, the checkout step events are not sent, and a reload of the confirmation page reports the order again.
+`begin_checkout`, `add_shipping_info` and `add_payment_info` pass the click or the submitted step to the next page in the session storage of the tab, and `purchase` keeps the 20 latest order references in the session storage of the tab, so they are gone when the tab is closed and a shared device keeps none. Where the storage is switched off, e.g. in a private window that blocks it, the checkout step events are not sent, and a reload of the confirmation page reports the order again.
 
 ### Products in ecommerce events
 
@@ -131,7 +131,7 @@ A click that leaves the page is never delayed. The gtag script collects the even
 
 ## Page URLs
 
-gtag sends the page URL and the referrer URL with every hit, including the `page_view` it sends on every page by default. The module sends them with the origin, the path and only the campaign query parameters GA4 reads for attribution: `utm_*`, `gclid`, `gbraid`, `wbraid`, `dclid` and `_gl`. Every other query parameter and the fragment are left out, as they may carry personal data, e.g. the token of a password reset link. On quote request pages, of the customer and of the agent, the quote request reference is also left out of the path and of the page title, e.g. `/quote-request/details/DE--21-8` is sent as `/quote-request/details/`, as the reference contains the customer reference. GA4 Enhanced Measurement site search, which reads the search term from the URL, therefore reports nothing; the module sends its own `search_results` and `zero_search_results` events.
+gtag sends the page URL and the referrer URL with every hit, including the `page_view` it sends on every page by default. The module sends them with the origin, the path and only the campaign query parameters GA4 reads for attribution: `utm_*`, `gclid`, `gbraid`, `wbraid`, `dclid` and `_gl`. Every other query parameter and the fragment are left out, as they may carry personal data, e.g. the token of a password reset link. On quote request pages, of the customer and of the agent, the quote request reference is also left out of the path and of the page title, e.g. `/quote-request/details/DE--21-8` is sent as `/quote-request/details/`, as the reference contains the customer reference; on wishlist pages the wishlist name, which the customer chooses, is left out the same way, e.g. `/wishlist/details/Birthday` is sent as `/wishlist/details/`. GA4 Enhanced Measurement site search, which reads the search term from the URL, therefore reports nothing; the module sends its own `search_results` and `zero_search_results` events.
 
 To keep more query parameters, register `\SprykerEco\Yves\GoogleAnalytics\Widget\GoogleAnalyticsWidget` in `ShopApplicationDependencyProvider::getGlobalWidgets()` and override `getAdditionalPageUrlQueryParameters()` in the project's `Pyz\Yves\GoogleAnalytics\GoogleAnalyticsConfig`, which extends `\SprykerEco\Yves\GoogleAnalytics\GoogleAnalyticsConfig`. Return only parameters that never carry personal data:
 
@@ -153,3 +153,27 @@ class GoogleAnalyticsConfig extends SprykerEcoGoogleAnalyticsConfig
 ```
 
 Without the widget, only the campaign parameters are kept.
+
+Other paths of the project with personal data in a segment, e.g. a customer-chosen name, are added in `getPersonalDataPagePathPatterns()` of the same config, as JavaScript regular expression sources: the first capture group is the part of the path that is kept, the second one the segment that is left out of the URLs and, decoded, out of the page title. Keep the module's patterns when adding one:
+
+```php
+    /**
+     * @return list<string>
+     */
+    public function getPersonalDataPagePathPatterns(): array
+    {
+        return array_merge(parent::getPersonalDataPagePathPatterns(), [
+            '(/shopping-list/[\\w-]+/)([^/]+)',
+        ]);
+    }
+```
+
+Without the widget, the module's patterns apply. Any other personal data in a page title, e.g. a customer name a project template shows, is removed by overriding `getTitleWithoutPersonalData()` of the `traceable-events-google-analytics` component.
+
+## Voucher codes
+
+The checkout and purchase events can send the voucher codes of the cart or the order as `coupon`. A voucher code issued to one customer, e.g. a personal code sent by email, identifies them, so the codes are not sent by default. To send them, register `GoogleAnalyticsWidget` and return `true` from `isCouponReported()` in the project's `GoogleAnalyticsConfig`; use it only when the shop's voucher codes are shared by many customers.
+
+## Search terms
+
+`search_results` and `zero_search_results` send the search term as the shopper typed it, as `search_term`. A shopper who searches for personal data, e.g. an email address or an order reference, sends it to GA4; such an event raised while the gtag script loads also waits in the session storage of the tab, for at most 30 minutes. Switch the search events off in the Back Office where this is not acceptable, or override `searchEventHandler()` of the `traceable-events-google-analytics` component to remove such terms.

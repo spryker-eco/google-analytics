@@ -35,6 +35,12 @@
 {# The price precision from GoogleAnalyticsConfig; while GoogleAnalyticsWidget is not registered, the Money precision it returns by default. #}
 {% set pricePrecision = findWidget('GoogleAnalyticsWidget').parameters.pricePrecision ?? constant('Spryker\\Shared\\Money\\Converter\\IntegerToDecimalConverter::PRICE_PRECISION') %}
 
+{# The page paths with personal data in a segment, from GoogleAnalyticsConfig; while GoogleAnalyticsWidget is not registered, the component uses the module's default patterns. #}
+{% set personalDataPagePathPatterns = findWidget('GoogleAnalyticsWidget').parameters.personalDataPagePathPatterns ?? null %}
+
+{# Voucher codes are sent only when GoogleAnalyticsConfig turns it on; off while GoogleAnalyticsWidget is not registered. #}
+{% set isCouponReported = findWidget('GoogleAnalyticsWidget').parameters.isCouponReported ?? false %}
+
 {% define attributes = {
     initial: shouldRender
         ? {
@@ -48,11 +54,15 @@
     'data-gtag-script-src': "https://www.googletagmanager.com/gtag/js?id=#{data.gtagId}",
     'price-precision': pricePrecision,
     'page-url-query-parameters': additionalPageUrlQueryParameters | json_encode,
+    'personal-data-page-path-patterns': personalDataPagePathPatterns is null ? null : personalDataPagePathPatterns | json_encode,
+    'coupon-reported': isCouponReported ? 'true' : 'false',
 } %}
 
 {#
     price-precision - storefront prices are integers of this many parts per currency unit, as Money stores them.
     page-url-query-parameters - JSON list of the query parameters kept in the page URLs besides the campaign ones.
+    personal-data-page-path-patterns - JSON list of regular expressions of page paths with personal data in a segment; missing, the module's defaults apply.
+    coupon-reported - 'true' when voucher codes are sent as `coupon` with the checkout and purchase events.
 #}
 
 {% block component %}

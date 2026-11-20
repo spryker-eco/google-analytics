@@ -10,6 +10,8 @@ import { CATEGORY_LEVEL_KEYS, CategoryLevelKey } from './category-levels';
 import { buildGtagItems, roundQuantitiesToWholePieces, sumItemsValue, VARIANT_VALUE_SEPARATOR } from './gtag-items';
 import {
     CAMPAIGN_QUERY_PARAMETERS,
+    createPagePathPatterns,
+    DEFAULT_PERSONAL_DATA_PAGE_PATH_PATTERNS,
     removePersonalDataFromTitle,
     removePersonalDataFromUrl,
 } from './page-data-sanitizer';
@@ -77,7 +79,8 @@ const PAYMENT_SUBMIT_STORAGE_KEY = 'traceable-events-google-analytics:payment-su
 // A new checkout start forgets them.
 const REPORTED_SHIPPING_TIER_STORAGE_KEY = 'traceable-events-google-analytics:reported-shipping-tier';
 const REPORTED_PAYMENT_TYPE_STORAGE_KEY = 'traceable-events-google-analytics:reported-payment-type';
-// The order references already reported, per Measurement ID, so reloading or returning to the confirmation page does not report an order again.
+// The order references already reported in the tab, per Measurement ID, so reloading or returning to the confirmation page does not report
+// an order again.
 const REPORTED_TRANSACTIONS_STORAGE_KEY = 'traceable-events-google-analytics:reported-transactions';
 const MAX_REPORTED_TRANSACTIONS = 20;
 
@@ -119,6 +122,13 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     protected priceDecimals = 0;
     // The query parameters a project keeps in the page URLs besides the campaign ones, set in GoogleAnalyticsConfig.
     protected additionalPageUrlQueryParameters: string[] = [];
+    // The page paths with personal data in a segment, set in GoogleAnalyticsConfig, see removePersonalDataFromUrl().
+    protected personalDataPagePathPatterns: RegExp[] = [];
+    // Voucher codes are sent as `coupon` only when the project turns it on in GoogleAnalyticsConfig: a code issued to one customer
+    // identifies them.
+    protected isCouponReported = false;
+    // One beforeunload listener for all events held for navigation, see holdEventForNavigation().
+    protected isPageLeaveListened = false;
     // Events raised while the gtag script is loading, in the order they were raised.
     protected pendingEvents: PendingEvent[] = [];
     // Events waiting for the page to be left, see holdEventForNavigation().
@@ -141,6 +151,8 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
         this.pricePrecision = this.readPricePrecision();
         this.priceDecimals = Math.round(Math.log10(this.pricePrecision));
         this.additionalPageUrlQueryParameters = this.readAdditionalPageUrlQueryParameters();
+        this.personalDataPagePathPatterns = createPagePathPatterns(this.readPersonalDataPagePathPatterns());
+        this.isCouponReported = this.getAttribute('coupon-reported') === 'true';
 
         this.configureGtag();
 
@@ -196,12 +208,13 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     // Origin and path, and only the query parameters of getPageUrlQueryParameters(); an empty or invalid URL, e.g. no referrer,
     // stays empty. A project with other personal data in its URLs, e.g. in a path of its own, removes it here.
     protected getUrlWithoutPersonalData(url: string): string {
-        return removePersonalDataFromUrl(url, this.getPageUrlQueryParameters());
+        return removePersonalDataFromUrl(url, this.getPageUrlQueryParameters(), this.personalDataPagePathPatterns);
     }
 
-    // The title of a quote request page shows its reference; a project with other personal data in its titles removes it here.
+    // The title of a page with personal data in its path, e.g. a quote request reference, usually shows it; a project with other
+    // personal data in its titles removes it here.
     protected getTitleWithoutPersonalData(title: string): string {
-        return removePersonalDataFromTitle(title, window.location.pathname);
+        return removePersonalDataFromTitle(title, window.location.pathname, this.personalDataPagePathPatterns);
     }
 
     // The campaign parameters and the ones the project keeps besides them, see GoogleAnalyticsConfig::getAdditionalPageUrlQueryParameters().
@@ -217,6 +230,18 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             return Array.isArray(parameters) ? parameters.map(String) : [];
         } catch {
             return [];
+        }
+    }
+
+    // A missing or malformed attribute, e.g. while GoogleAnalyticsWidget is not registered, keeps the module's patterns, so no personal
+    // data segment is sent by mistake.
+    protected readPersonalDataPagePathPatterns(): string[] {
+        try {
+            const patterns: unknown = JSON.parse(this.getAttribute('personal-data-page-path-patterns'));
+
+            return Array.isArray(patterns) ? patterns.map(String) : [...DEFAULT_PERSONAL_DATA_PAGE_PATH_PATTERNS];
+        } catch {
+            return [...DEFAULT_PERSONAL_DATA_PAGE_PATH_PATTERNS];
         }
     }
 
@@ -527,7 +552,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     protected getCheckoutParams(data: PageLoadData): Record<string, unknown> {
         const checkoutParams: Record<string, unknown> = {};
 
-        if (data.checkoutCoupon) {
+        if (this.isCouponReported && data.checkoutCoupon) {
             checkoutParams.coupon = data.checkoutCoupon;
         }
 
@@ -561,7 +586,7 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
             purchaseParams.tax = tax;
         }
 
-        if (purchase.coupon) {
+        if (this.isCouponReported && purchase.coupon) {
             purchaseParams.coupon = purchase.coupon;
         }
 
@@ -700,12 +725,24 @@ export default class TraceableEventsGoogleAnalytics extends BaseTraceableEventAd
     // The listener is added only while an event waits, as a beforeunload listener keeps some browsers from caching the page.
     protected holdEventForNavigation(event: PendingEvent): void {
         this.eventsHeldForNavigation.push(event);
-
-        window.addEventListener('beforeunload', () => this.storePendingEvents(), {
-            once: true,
-            signal: this.listenersController.signal,
-        });
+        this.listenForPageLeave();
         window.setTimeout(() => this.sendEventHeldForNavigation(event), NAVIGATION_WAIT_MILLISECONDS);
+    }
+
+    protected listenForPageLeave(): void {
+        if (this.isPageLeaveListened) {
+            return;
+        }
+
+        this.isPageLeaveListened = true;
+        window.addEventListener(
+            'beforeunload',
+            () => {
+                this.isPageLeaveListened = false;
+                this.storePendingEvents();
+            },
+            { once: true, signal: this.listenersController.signal },
+        );
     }
 
     // An event already stored for the next page is no longer held, so none is sent twice.
